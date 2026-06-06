@@ -35,23 +35,36 @@ jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 90
+    env:
+      # Map both dispatch types to consistent env vars
+      PRODUCT: ${{ inputs.product || github.event.client_payload.product }}
+      EDITION: ${{ inputs.edition || github.event.client_payload.edition }}
+      LABEL: ${{ inputs.label || github.event.client_payload.label }}
+      UUP_UUID: ${{ inputs.uup_uuid || github.event.client_payload.uup_uuid }}
+      UUP_TITLE: ${{ inputs.uup_title || github.event.client_payload.uup_title }}
+      AUTOU_XML: ${{ inputs.autounattend_xml || github.event.client_payload.autounattend_xml || '' }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install Python deps
         run: pip install -e .
+
       - name: Sync Intel RST drivers
         run: python scripts/drivers/sync_intel_rst.py
+
       - name: Fetch UUP + build ISO
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          python -m scripts.uupd.download "${{ inputs.uup_uuid }}" "${{ inputs.edition }}"
-          bash scripts/build/convert.sh "${{ inputs.uup_uuid }}" "${{ inputs.edition }}" artifacts/
+          python -m scripts.uupd.download "$UUP_UUID" "$EDITION"
+          bash scripts/build/convert.sh "$UUP_UUID" "$EDITION" artifacts/
+
       - name: Mount ISO + inject drivers + autounattend
         shell: pwsh
         run: |
@@ -59,26 +72,30 @@ jobs:
           $mount = "artifacts/mount"
           $drivers = Get-ChildItem -Recurse -Directory "drivers/pack/intel-rst" | Where-Object { Test-Path (Join-Path $_.FullName "iaStorAC.inf") }
           ./scripts/build/dism-helpers.ps1 -WimPath $wim -MountDir $mount -DriverDirs $drivers.FullName
-      - name: Render autounattend
-        if: inputs.autounattend_xml != ''
+
+      - name: Write rendered autounattend to disk
+        if: env.AUTOU_XML != ''
         shell: bash
         run: |
           mkdir -p artifacts/autounattend
-          echo '${{ inputs.autounattend_xml }}' > artifacts/autounattend/win11.xml
-          python -m scripts.build.inject_autounattend artifacts/autounattend/win11.xml artifacts/autounattend/win11.xml '{}'
-      - name: Repack ISO
+          # AUTOU_XML is pre-rendered with secrets; write it directly
+          echo "$AUTOU_XML" > artifacts/autounattend/win11.xml
+
+      - name: Repack ISO with autounattend
         shell: bash
         run: |
           AUTOU="artifacts/autounattend/win11.xml"
           [ -f "$AUTOU" ] || AUTOU="autounattend/base.xml"
-          bash scripts/build/repack.sh artifacts/iso-in.iso artifacts/win11-${{ inputs.edition }}.iso artifacts/install.wim "$AUTOU"
-      - name: Determine target account
+          bash scripts/build/repack.sh artifacts/iso-in.iso "artifacts/win11-${EDITION}.iso" artifacts/install.wim "$AUTOU"
+
+      - name: Assign upload account
         id: assign
         shell: bash
         run: |
           echo "${{ secrets.ACCOUNTS_YAML }}" > /tmp/accounts.yaml
-          ACCOUNT=$(python -m scripts.rclone.assign win11-24h2 6.0 /tmp/accounts.yaml)
+          ACCOUNT=$(python -m scripts.rclone.assign "win11-24h2" "6.0" /tmp/accounts.yaml)
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
+
       - name: Upload ISO to Google Drive
         shell: bash
         env:
@@ -87,13 +104,14 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
           bash scripts/rclone/upload.sh \
-            artifacts/win11-${{ inputs.edition }}.iso \
+            "artifacts/win11-${EDITION}.iso" \
             ${{ steps.assign.outputs.account }} \
-            "iso/${{ inputs.product }}/" \
+            "iso/${PRODUCT}/" \
             ~/.config/rclone/rclone.conf
+
       - name: Upload artifact (debug)
         uses: actions/upload-artifact@v4
         with:
-          name: iso-${{ inputs.product }}-${{ inputs.edition }}
+          name: iso-${{ env.PRODUCT }}-${{ env.EDITION }}
           path: artifacts/*.iso
           retention-days: 7
