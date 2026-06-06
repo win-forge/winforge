@@ -1,5 +1,4 @@
 from pathlib import Path
-import pytest
 from scripts.build.matrix import expand
 
 def test_expand_win11_24h2_includes_pro_and_enterprise():

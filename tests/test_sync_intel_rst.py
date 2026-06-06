@@ -1,5 +1,4 @@
 from pathlib import Path
-import pytest
 from scripts.drivers.sync_intel_rst import extract_version_from_filename, find_driver_root
 
 def test_version_extraction():

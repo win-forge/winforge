@@ -1,5 +1,3 @@
-import json
-import pytest
 from pathlib import Path
 from scripts.uupd.diff import load_known, save_known, diff_new
 

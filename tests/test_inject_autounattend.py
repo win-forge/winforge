@@ -1,5 +1,3 @@
-from pathlib import Path
-import pytest
 from scripts.build.inject_autounattend import render
 
 def test_renders_replacements():

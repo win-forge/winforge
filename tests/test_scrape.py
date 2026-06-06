@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 import pytest
 from scripts.uupd.scrape import parse_known_page, Build
 

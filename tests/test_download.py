@@ -1,6 +1,4 @@
-from unittest.mock import patch, MagicMock
-import pytest
-from scripts.uupd.download import build_request, parse_response, ConversionInputs
+from scripts.uupd.download import build_request, parse_response
 
 UUID = "00000000-0000-0000-0000-000000000001"
 

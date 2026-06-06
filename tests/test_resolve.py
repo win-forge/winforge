@@ -1,4 +1,3 @@
-import pytest
 from scripts.uupd.resolve import resolve
 from scripts.uupd.scrape import Build
 
