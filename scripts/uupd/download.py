@@ -7,7 +7,13 @@ parse layer can be swapped.)
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from pathlib import Path
+import argparse
+import hashlib
+import json
 import re
+import subprocess
+import sys
 import requests
 
 
@@ -39,3 +45,70 @@ def fetch(uuid: str, edition: str, lang: str = "en-US") -> ConversionInputs:
     r = requests.get(build_request(uuid, edition, lang), timeout=60)
     r.raise_for_status()
     return parse_response(r.text)
+
+
+def download_files(inputs: ConversionInputs, output_dir: Path) -> list[Path]:
+    """Download all UUP files via aria2 from the 'files' URLs parsed from the page.
+    
+    Returns list of local file paths.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base_url = "https://uupdump.net/files/"
+    urls = [base_url + f for f in inputs.files]
+    
+    # Write aria2 input file
+    arena_input = output_dir / "aria2.txt"
+    with open(arena_input, "w") as f:
+        for url, local_name in zip(urls, inputs.files):
+            f.write(f"{url}\n")
+            f.write(f"  out={local_name}\n")
+    
+    # Run aria2
+    result = subprocess.run(
+        ["aria2c", "-c", "-x4", "-s4", "--dir", str(output_dir), "-i", str(arena_input)],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"aria2 failed:\n{result.stderr}")
+    
+    # Also download the converter script if URL is present
+    if inputs.converter_script_url:
+        script_url = inputs.converter_script_url
+        if script_url.startswith("//"):
+            script_url = "https:" + script_url
+        elif script_url.startswith("/"):
+            script_url = "https://uupdump.net" + script_url
+        r = requests.get(script_url, timeout=30)
+        r.raise_for_status()
+        script_path = output_dir / "uup_download_linux.sh"
+        script_path.write_text(r.text)
+        script_path.chmod(0o755)
+    
+    # Generate hashes manifest
+    hashes = {}
+    for path in output_dir.iterdir():
+        if path.is_file() and path.suffix in (".cab", ".esd", ".psf", ".msu"):
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            hashes[path.name] = h.hexdigest()
+    (output_dir / "hashes.json").write_text(json.dumps(hashes, indent=2))
+    
+    return [output_dir / f for f in inputs.files if (output_dir / f).exists()]
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Fetch UUP-dump files for a build+edition")
+    parser.add_argument("uuid", help="UUP-dump build UUID")
+    parser.add_argument("edition", help="Edition (professional, enterprise, etc.)")
+    parser.add_argument("--output-dir", "-o", default="./uup-files", help="Output directory")
+    parser.add_argument("--lang", default="en-US", help="Language code")
+    args = parser.parse_args()
+    
+    inputs = fetch(args.uuid, args.edition, args.lang)
+    files = download_files(inputs, Path(args.output_dir))
+    
+    print(f"Downloaded {len(files)} files to {args.output_dir}/")
+    for f in files:
+        print(f"  {f.name} ({f.stat().st_size / 1e6:.1f} MB)")
