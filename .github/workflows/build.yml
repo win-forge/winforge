@@ -1,0 +1,99 @@
+name: build
+on:
+  workflow_call:
+    inputs:
+      product:
+        required: true
+        type: string
+      edition:
+        required: true
+        type: string
+      label:
+        required: true
+        type: string
+      uup_uuid:
+        required: true
+        type: string
+      uup_title:
+        required: true
+        type: string
+      autounattend_xml:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      RCLONE_CONF:
+        required: true
+      ACCOUNTS_YAML:
+        required: true
+      INTEL_RST_TOKEN:
+        required: false
+  repository_dispatch:
+    types: [build-request]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python deps
+        run: pip install -e .
+      - name: Sync Intel RST drivers
+        run: python scripts/drivers/sync_intel_rst.py
+      - name: Fetch UUP + build ISO
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python -m scripts.uupd.download "${{ inputs.uup_uuid }}" "${{ inputs.edition }}"
+          bash scripts/build/convert.sh "${{ inputs.uup_uuid }}" "${{ inputs.edition }}" artifacts/
+      - name: Mount ISO + inject drivers + autounattend
+        shell: pwsh
+        run: |
+          $wim = "artifacts/install.wim"
+          $mount = "artifacts/mount"
+          $drivers = Get-ChildItem -Recurse -Directory "drivers/pack/intel-rst" | Where-Object { Test-Path (Join-Path $_.FullName "iaStorAC.inf") }
+          ./scripts/build/dism-helpers.ps1 -WimPath $wim -MountDir $mount -DriverDirs $drivers.FullName
+      - name: Render autounattend
+        if: inputs.autounattend_xml != ''
+        shell: bash
+        run: |
+          mkdir -p artifacts/autounattend
+          echo '${{ inputs.autounattend_xml }}' > artifacts/autounattend/win11.xml
+          python -m scripts.build.inject_autounattend artifacts/autounattend/win11.xml artifacts/autounattend/win11.xml '{}'
+      - name: Repack ISO
+        shell: bash
+        run: |
+          AUTOU="artifacts/autounattend/win11.xml"
+          [ -f "$AUTOU" ] || AUTOU="autounattend/base.xml"
+          bash scripts/build/repack.sh artifacts/iso-in.iso artifacts/win11-${{ inputs.edition }}.iso artifacts/install.wim "$AUTOU"
+      - name: Determine target account
+        id: assign
+        shell: bash
+        run: |
+          echo "${{ secrets.ACCOUNTS_YAML }}" > /tmp/accounts.yaml
+          ACCOUNT=$(python -m scripts.rclone.assign win11-24h2 6.0 /tmp/accounts.yaml)
+          echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
+      - name: Upload ISO to Google Drive
+        shell: bash
+        env:
+          RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
+          bash scripts/rclone/upload.sh \
+            artifacts/win11-${{ inputs.edition }}.iso \
+            ${{ steps.assign.outputs.account }} \
+            "iso/${{ inputs.product }}/" \
+            ~/.config/rclone/rclone.conf
+      - name: Upload artifact (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-${{ inputs.product }}-${{ inputs.edition }}
+          path: artifacts/*.iso
+          retention-days: 7

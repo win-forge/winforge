@@ -1,0 +1,17 @@
+products:
+  - match: "Windows 11, version 24H2"
+    name: win11-24h2
+    family: win11
+    track: stable
+  - match: "Windows 11, version 25H2"
+    name: win11-25h2
+    family: win11
+    track: stable
+  - match: "Windows 10, version 22H2"
+    name: win10-22h2
+    family: win10
+    track: ltsc
+  - match: "Windows 11 IoT Enterprise LTSC"
+    name: win11-ltsc
+    family: win11
+    track: ltsc

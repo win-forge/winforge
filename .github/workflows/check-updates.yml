@@ -1,0 +1,67 @@
+name: check-updates
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      builds: ${{ steps.scrape.outputs.builds }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Scrape UUP-dump + diff against state
+        id: scrape
+        shell: bash
+        run: |
+          mkdir -p .state
+          python -c "
+          from scripts.uupd.scrape import fetch_latest
+          from scripts.uupd.diff import load_known, save_known, diff_new
+          from scripts.uupd.resolve import resolve
+          from pathlib import Path
+          import json, sys
+          scraped = fetch_latest()
+          state = Path('.state/known.json')
+          new = diff_new(state, scraped)
+          save_known(state, scraped)
+          from scripts.uupd.scrape import Build
+          new_builds = [Build(**{k: b[k] for k in ('title','arch','uuid','added_at')}) for b in new]
+          rows = [r for r in (resolve(b) for b in new_builds) if r]
+          from scripts.build.matrix import expand
+          matrix = []
+          for r in rows:
+              for ed in expand(Path('config/editions.yaml'), product=r['name']):
+                  matrix.append({**r, **ed})
+          print('builds=' + json.dumps(matrix))
+          " | tee scrape.out
+          BUILDS=$(grep -E '^builds=' scrape.out | sed 's/^builds=//')
+          echo "builds=$BUILDS" >> $GITHUB_OUTPUT
+
+  open-pr:
+    needs: check
+    if: needs.check.outputs.builds != '[]' && needs.check.outputs.builds != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: yoav/winforge-private
+          token: ${{ secrets.WINFORGE_PRIVATE_TOKEN }}
+      - name: Build manifest
+        env:
+          BUILDS: ${{ needs.check.outputs.builds }}
+          GH_TOKEN: ${{ secrets.WINFORGE_PRIVATE_TOKEN }}
+        run: |
+          echo "$BUILDS" > manifests/new-builds.json
+          git config user.name "winforge-bot"
+          git config user.email "winforge-bot@users.noreply.github.com"
+          git checkout -b "auto/$(date -u +%Y%m%dT%H%M%S)"
+          git add manifests/new-builds.json
+          git commit -m "ci: new UUP-dump builds detected"
+          git push -u origin "HEAD"
+          gh pr create --title "Auto: new UUP-dump builds" --body-file manifests/new-builds.json

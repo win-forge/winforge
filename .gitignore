@@ -1,0 +1,26 @@
+# Build outputs
+artifacts/
+*.iso
+*.wim
+*.esd
+uup-converter/
+drivers/pack/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets — never commit these
+secrets/
+*.rclone.conf
+*.oauth
+# Build metadata
+*.egg-info/
+

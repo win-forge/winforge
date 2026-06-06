@@ -1,0 +1,17 @@
+# rclone remotes, one per Google Drive account.
+# The CI fetches the actual rclone.conf (with refresh tokens) from
+# the private repo at build time, so this file declares ONLY the
+# logical names + which account handles which edition family.
+accounts:
+  - name: gd-account-1
+    handles_products: [win11-24h2, win11-25h2]
+    quota_gb: 15
+  - name: gd-account-2
+    handles_products: [win11-24h2, win10-22h2]
+    quota_gb: 15
+  - name: gd-account-3
+    handles_products: [win11-25h2, win11-ltsc, win10-22h2]
+    quota_gb: 15
+
+# Default assignment strategy: round-robin within handles_products
+strategy: round_robin
