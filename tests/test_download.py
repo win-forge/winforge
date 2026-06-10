@@ -10,7 +10,7 @@ from scripts.uupd.download import (
     ConversionInputs,
 )
 
-
+REPO_ROOT = Path(__file__).parent.parent
 UUID = "00000000-0000-0000-0000-000000000001"
 
 
@@ -122,7 +122,7 @@ def test_download_cli_handles_404_gracefully(tmp_path: Path, monkeypatch: pytest
     subprocess.run(
         [sys.executable, "-m", "scripts.uupd.download", "fake-uuid-1234", "professional",
          "--output-dir", str(tmp_path / "out")],
-        capture_output=True, text=True, cwd="/opt/data/winforge", timeout=30,
+        capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=30,
     )
     # Should not exit 0 (aria2 will fail), but should have produced an aria2.txt
     aria2_input = tmp_path / "out" / "aria2.txt"
