@@ -1,6 +1,8 @@
 """Sync the latest Intel RST/VMD driver pack into drivers/pack/intel-rst/<version>/.
 
 Source: https://www.intel.com/content/www/us/en/download/849936/...
+Handles both old format (SetupRST_X.Y.Z.W.exe) and new format (SetupRST.exe on a
+page that lists the version).
 """
 from __future__ import annotations
 import re
@@ -17,11 +19,17 @@ DOWNLOAD_PAGE = (
     "intel-rapid-storage-technology-driver-installation-software-with-intel-optane-memory.html"
 )
 PACK_ROOT = Path(__file__).parent / "pack" / "intel-rst"
-VERSION_RE = re.compile(r"SetupRST[_A-Za-z]*(\d+(?:\.\d+)+)\.exe", re.IGNORECASE)
+
+# Filename with version: SetupRST_19.5.2.1049.exe
+VERSIONED_RE = re.compile(r"SetupRST[_A-Za-z]*(\d+(?:\.\d+)+)\.exe", re.IGNORECASE)
+# Generic filename (no version): SetupRST.exe
+GENERIC_RE = re.compile(r'href="(https?://downloadmirror\.intel\.com/\d+/SetupRST\.exe)"', re.IGNORECASE)
+# Version text somewhere on the page
+PAGE_VERSION_RE = re.compile(r"\b(\d+\.\d+\.\d+\.\d+)\b")
 
 
 def extract_version_from_filename(name: str) -> str | None:
-    m = VERSION_RE.search(name)
+    m = VERSIONED_RE.search(name)
     return m.group(1) if m else None
 
 
@@ -34,17 +42,33 @@ def find_driver_root(extract_dir: Path) -> Path:
 
 
 def fetch_latest_metadata() -> tuple[str, str]:
-    """Return (version, direct_download_url)."""
-    r = requests.get(DOWNLOAD_PAGE, timeout=30)
+    """Return (version, direct_download_url).
+
+    Tries the new generic filename + page-version pattern first, then falls back
+    to the old versioned filename pattern.
+    """
+    r = requests.get(DOWNLOAD_PAGE, timeout=30, allow_redirects=True)
     r.raise_for_status()
-    m = VERSION_RE.search(r.text)
-    if not m:
-        raise RuntimeError("Could not parse RST version from Intel download page")
-    version = m.group(1)
-    download_url = (
-        f"https://downloadmirror.intel.com/849936/eng/SetupRST_{version}.exe"
+    html = r.text
+
+    # New pattern: SetupRST.exe + version listed elsewhere on the page
+    m_url = GENERIC_RE.search(html)
+    if m_url:
+        m_ver = PAGE_VERSION_RE.search(html)
+        if m_ver:
+            return m_ver.group(1), m_url.group(1)
+
+    # Old pattern: filename contains the version
+    m = VERSIONED_RE.search(html)
+    if m:
+        version = m.group(1)
+        download_url = f"https://downloadmirror.intel.com/849936/eng/SetupRST_{version}.exe"
+        return version, download_url
+
+    raise RuntimeError(
+        f"Could not parse RST version/URL from Intel download page "
+        f"(page returned {len(html)} bytes, no SetupRST.exe link found)"
     )
-    return version, download_url
 
 
 def sync(target_root: Path = PACK_ROOT) -> Path:
@@ -54,7 +78,7 @@ def sync(target_root: Path = PACK_ROOT) -> Path:
         info("drivers.already_synced", version=version, path=str(out_dir))
         return out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    installer = out_dir / f"SetupRST_{version}.exe"
+    installer = out_dir / "SetupRST.exe"
     info("drivers.downloading", version=version, url=url)
     with requests.get(url, stream=True, timeout=120) as r:
         r.raise_for_status()
