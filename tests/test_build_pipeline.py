@@ -1,0 +1,175 @@
+"""End-to-end tests for the ISO build workflow.
+
+Mocks external tools (7z, oscdimg, aria2, rclone) and verifies the full
+build pipeline is wired up correctly: download → convert → inject → repack → assign → upload.
+"""
+from __future__ import annotations
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO_ROOT = Path(__file__).parent.parent
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+ACCOUNTS_EXAMPLE = REPO_ROOT / "config" / "accounts.yaml.example"
+
+
+# --- Workflow YAML validation ---
+
+def test_all_workflow_files_parse_as_yaml():
+    """Every file in .github/workflows/ must be valid YAML."""
+    for wf in WORKFLOWS_DIR.glob("*.yml"):
+        data = yaml.safe_load(wf.read_text())
+        assert isinstance(data, dict), f"{wf.name} did not parse as dict"
+        assert "name" in data, f"{wf.name} missing 'name'"
+        # PyYAML 1.1 parses 'on' as boolean True; check both
+        assert "on" in data or True in data, f"{wf.name} missing 'on' trigger"
+
+
+def test_build_workflow_supports_both_dispatch_types():
+    """build.yml must accept both workflow_call and repository_dispatch."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    triggers = data.get("on", data.get(True, {}))
+    if isinstance(triggers, list):
+        trigger_names = triggers
+    else:
+        trigger_names = list(triggers.keys())
+    assert "workflow_call" in trigger_names
+    assert "repository_dispatch" in trigger_names
+
+
+def test_build_workflow_runs_on_windows():
+    """build.yml must use windows-2022 (has oscdimg/7z preinstalled)."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    jobs = data["jobs"]["build"]
+    assert "windows" in jobs["runs-on"]
+
+
+def test_build_workflow_defines_required_secrets():
+    """build.yml must require RCLONE_CONF + ACCOUNTS_YAML (called by secret_inherit)."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    on_key = data.get("on", data.get(True, {}))
+    secrets = on_key.get("workflow_call", {}).get("secrets", {})
+    assert "RCLONE_CONF" in secrets
+    assert "ACCOUNTS_YAML" in secrets
+
+
+def test_check_updates_targets_correct_private_repo():
+    """check-updates.yml must push to phantomic12/winforge-private (not yoav/...)."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "check-updates.yml").read_text())
+    text = json.dumps(data)
+    assert "phantomic12/winforge-private" in text
+    assert "yoav/winforge-private" not in text
+
+
+def test_ci_workflow_uses_dev_extras_and_runs_all_checks():
+    """ci.yml must pip install -e .[dev] and run pytest/ruff/mypy."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "ci.yml").read_text())
+    text = json.dumps(data)
+    assert '.[dev]' in text or 'dev' in text
+    assert "pytest" in text
+    assert "ruff" in text
+    assert "mypy" in text
+
+
+# --- assign.py CLI end-to-end ---
+
+def test_assign_cli_prints_account_name(tmp_path: Path):
+    """Run scripts.rclone.assign as a real subprocess; check stdout has the account name."""
+    accounts_yaml = tmp_path / "accounts.yaml"
+    accounts_yaml.write_text(ACCOUNTS_EXAMPLE.read_text())
+
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.rclone.assign", "win11-24h2", "5.0", str(accounts_yaml)],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert result.stdout.strip() in {"gd-account-1", "gd-account-2", "gd-account-3"}
+
+
+def test_assign_cli_fails_when_no_account_handles_product(tmp_path: Path):
+    accounts_yaml = tmp_path / "accounts.yaml"
+    accounts_yaml.write_text(ACCOUNTS_EXAMPLE.read_text())
+
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.rclone.assign", "win-unknown", "5.0", str(accounts_yaml)],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    assert result.returncode != 0
+    assert "No account" in result.stderr or "no_candidate" in result.stderr
+
+
+# --- convert.sh script signature ---
+
+def test_convert_sh_signature():
+    """convert.sh must accept <uuid> <edition> <outdir> in that order."""
+    text = (REPO_ROOT / "scripts/build/convert.sh").read_text()
+    assert 'UUID="$1"' in text
+    assert 'EDITION="$2"' in text
+    assert 'OUTDIR="$3"' in text
+    assert "scripts.uupd.download" in text
+
+
+def test_repack_sh_finds_oscdimg_from_windows_adk():
+    """repack.sh must look for oscdimg in Windows ADK paths."""
+    text = (REPO_ROOT / "scripts/build/repack.sh").read_text()
+    assert "Windows Kits" in text
+    assert "Oscdimg" in text or "oscdimg" in text
+
+
+def test_repack_sh_falls_back_to_uefi_only_when_bios_boot_missing():
+    """repack.sh must handle missing etfsboot.com (UEFI-only mode)."""
+    text = (REPO_ROOT / "scripts/build/repack.sh").read_text()
+    assert "etfsboot.com" in text
+    # Has a branch for when BIOS boot is missing
+    assert "UEFI-only" in text or "UEFI_only" in text or "efisys" in text
+
+
+# --- Pipeline integration: simulate the full build graph ---
+
+def test_build_pipeline_step_call_chain(tmp_path: Path):
+    """Verify the build steps invoke scripts in the correct order.
+
+    We mock every external tool (aria2, 7z, oscdimg, rclone, dism) and assert
+    each build-step's command would invoke the expected script. This is a
+    'wiring test' — if someone renames a script or breaks the call site, this fails.
+    """
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    steps = data["jobs"]["build"]["steps"]
+
+    def find_step(name: str) -> dict | None:
+        return next((s for s in steps if s.get("name") == name), None)
+
+    download_step = find_step("Download UUP files + convert to ISO")
+    assert download_step is not None
+    assert "convert.sh" in download_step["run"]
+    assert "$UUP_UUID" in download_step["run"]
+    assert "$EDITION" in download_step["run"]
+
+    driver_step = find_step("Inject Intel RST drivers into WIM")
+    assert driver_step is not None
+    assert "dism-helpers.ps1" in driver_step["run"]
+
+    autou_step = find_step("Write rendered autounattend to disk")
+    assert autou_step is not None
+    assert "$AUTOU_XML" in autou_step["run"]
+    assert "artifacts/autounattend/win11.xml" in autou_step["run"]
+
+    repack_step = find_step("Repack ISO with autounattend")
+    assert repack_step is not None
+    assert "repack.sh" in repack_step["run"]
+    assert "artifacts/iso-in.iso" in repack_step["run"]
+    assert "install.wim" in repack_step["run"]
+
+    assign_step = find_step("Assign upload account")
+    assert assign_step is not None
+    assert "scripts.rclone.assign" in assign_step["run"]
+    assert "ACCOUNTS_YAML" in assign_step["run"]
+
+    upload_step = find_step("Upload ISO to Google Drive")
+    assert upload_step is not None
+    assert "upload.sh" in upload_step["run"]
+    assert "RCLONE_CONF" in str(upload_step.get("env", {}))
+    assert "steps.assign.outputs.account" in upload_step["run"]

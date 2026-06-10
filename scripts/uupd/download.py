@@ -46,9 +46,25 @@ def fetch(uuid: str, edition: str, lang: str = "en-US") -> ConversionInputs:
     return parse_response(r.text)
 
 
+def resolve_script_url(base_url: str, script_name: str) -> str:
+    """Resolve a UUP-dump script URL to its platform-specific variant.
+
+    Takes the parsed converter script URL and returns a URL for the
+    requested script_name (e.g. 'uup_download_windows.cmd').
+    """
+    if not base_url:
+        return ""
+    base_dir = base_url.rsplit("/", 1)[0] + "/"
+    if base_url.startswith("//"):
+        return "https:" + base_dir + script_name
+    if base_url.startswith("/"):
+        return "https://uupdump.net" + base_dir + script_name
+    return base_dir + script_name
+
+
 def download_files(inputs: ConversionInputs, output_dir: Path) -> list[Path]:
     """Download all UUP files via aria2 from the 'files' URLs parsed from the page.
-    
+
     Returns list of local file paths.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -73,13 +89,9 @@ def download_files(inputs: ConversionInputs, output_dir: Path) -> list[Path]:
     # Download ALL converter scripts (both Linux and Windows)
     if inputs.converter_script_url:
         for script_name in ("uup_download_windows.cmd", "uup_download_linux.sh"):
-            script_url = inputs.converter_script_url.replace(
-                inputs.converter_script_url.rsplit("/", 1)[-1], script_name
-            )
-            if script_url.startswith("//"):
-                script_url = "https:" + script_url
-            elif script_url.startswith("/"):
-                script_url = "https://uupdump.net" + script_url
+            script_url = resolve_script_url(inputs.converter_script_url, script_name)
+            if not script_url:
+                continue
             try:
                 r = requests.get(script_url, timeout=30)
                 r.raise_for_status()
