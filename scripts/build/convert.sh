@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Download UUP files + run UUP-dump converter to produce ISO.
-# Usage: convert.sh <uuid> <edition> <output-dir>
-# Runs on Windows (Git Bash) — Windows runners have DISM, oscdimg, wimlib.
+# Usage: convert.sh <uuid> <edition> <output-dir> [compression]
+# Compression: wim (default) or esd.
 set -euo pipefail
 
 UUID="$1"
 EDITION="$2"
 OUTDIR="$3"
+COMPRESSION="${4:-wim}"
+
+if [[ "$COMPRESSION" != "wim" && "$COMPRESSION" != "esd" ]]; then
+    echo "[convert] ERROR: compression must be 'wim' or 'esd', got '$COMPRESSION'"
+    exit 1
+fi
 
 mkdir -p "$OUTDIR"
 WORK=$(mktemp -d)
@@ -87,7 +93,7 @@ if [ -f "$WORK/converter/convert.sh" ]; then
     # The converter logs to its own log file internally; we tee stdout to a file
     # in $WORK (not the relative $OUTDIR) so we always have access regardless of cwd.
     CONVERT_LOG="$WORK/convert.log"
-    (cd "$WORK/converter" && bash convert.sh wim UUPs 0 2>&1) | tee "$CONVERT_LOG" | tail -30
+    (cd "$WORK/converter" && bash convert.sh "$COMPRESSION" UUPs 0 2>&1) | tee "$CONVERT_LOG" | tail -30
     # Copy convert.log to $OUTDIR for debugging
     cp "$CONVERT_LOG" "$OUTDIR/convert.log" 2>/dev/null || true
 else

@@ -1,0 +1,7 @@
+# LTSC channel: Windows 11 IoT Enterprise LTSC, ESD compression.
+# LTSC is for stable, long-term deployments where you want maximum compatibility.
+product: win11-ltsc
+edition: iotenterprise
+language: en-us
+compression: esd
+label: win11-ltsc

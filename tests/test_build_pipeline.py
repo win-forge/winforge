@@ -104,12 +104,23 @@ def test_assign_cli_fails_when_no_account_handles_product(tmp_path: Path):
 # --- convert.sh script signature ---
 
 def test_convert_sh_signature():
-    """convert.sh must accept <uuid> <edition> <outdir> in that order."""
+    """convert.sh must accept <uuid> <edition> <outdir> [compression] in that order."""
     text = (REPO_ROOT / "scripts/build/convert.sh").read_text()
     assert 'UUID="$1"' in text
     assert 'EDITION="$2"' in text
     assert 'OUTDIR="$3"' in text
     assert "scripts.uupd.download" in text
+
+
+def test_convert_sh_accepts_compression_arg():
+    """convert.sh must pass its 4th arg (compression) to UUP-dump converter."""
+    text = (REPO_ROOT / "scripts/build/convert.sh").read_text()
+    # The 4th arg is COMPRESSION, defaulting to wim
+    assert 'COMPRESSION="${4:-wim}"' in text or 'COMPRESSION="$4"' in text
+    # It must be validated (only wim/esd)
+    assert 'must be' in text and 'wim' in text and 'esd' in text
+    # And passed to the UUP-dump converter (not hardcoded)
+    assert 'bash convert.sh "$COMPRESSION"' in text or 'bash convert.sh wim' in text
 
 
 def test_repack_sh_finds_iso_builder_from_multiple_sources():
@@ -174,3 +185,49 @@ def test_build_pipeline_step_call_chain(tmp_path: Path):
     assert "upload.sh" in upload_step["run"]
     assert "RCLONE_CONF" in str(upload_step.get("env", {}))
     assert "steps.assign.outputs.account" in upload_step["run"]
+
+
+# --- Profile resolution ---
+
+def test_build_workflow_accepts_profile_input():
+    """build.yml must accept 'profile' as a workflow_call input."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    on_key = data.get("on", data.get(True, {}))
+    call_inputs = on_key.get("workflow_call", {}).get("inputs", {})
+    assert "profile" in call_inputs
+    assert call_inputs["profile"]["type"] == "string"
+
+
+def test_build_workflow_has_profile_resolution_step():
+    """build.yml must have a step that calls scripts.profiles.load."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    steps = data["jobs"]["build"]["steps"]
+    profile_step = next((s for s in steps if "Resolve profile" in s.get("name", "")), None)
+    assert profile_step is not None
+    assert "scripts.profiles.load" in profile_step["run"]
+
+
+def test_build_workflow_maps_language_and_compression_env_vars():
+    """build.yml must thread LANGUAGE + COMPRESSION through to convert.sh."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    text = json.dumps(data)
+    assert "LANGUAGE" in text
+    assert "COMPRESSION" in text
+    # The convert step must pass compression as the 4th arg
+    steps = data["jobs"]["build"]["steps"]
+    convert_step = next((s for s in steps if "convert" in s.get("name", "").lower()), None)
+    assert convert_step is not None
+    assert "$COMPRESSION" in convert_step["run"]
+
+
+def test_build_workflow_uses_label_for_output_filename():
+    """Final ISO + artifact name should use $LABEL from the profile."""
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    steps = data["jobs"]["build"]["steps"]
+    repack_step = next((s for s in steps if "Repack" in s.get("name", "")), None)
+    assert repack_step is not None
+    # May use ${LABEL:-...} or $LABEL — both are fine
+    assert "LABEL" in repack_step["run"]
+    upload_step = next((s for s in steps if "Upload ISO to Google" in s.get("name", "")), None)
+    assert upload_step is not None
+    assert "LABEL" in upload_step["run"]

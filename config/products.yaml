@@ -3,15 +3,25 @@ products:
     name: win11-24h2
     family: win11
     track: stable
+    # Latest known UUP-dump build. check-updates.yml updates this nightly.
+    # Manual override: bump when you want to force a specific build.
+    latest_uup_uuid: "ebfcd736-eb43-42c3-aff2-35445412d076"
+    latest_uup_title: "Preview Update for Windows 11 (28000.2179) amd64"
   - match: "Windows 11, version 25H2"
     name: win11-25h2
     family: win11
     track: stable
+    latest_uup_uuid: ""
+    latest_uup_title: ""
   - match: "Windows 10, version 22H2"
     name: win10-22h2
     family: win10
     track: ltsc
+    latest_uup_uuid: ""
+    latest_uup_title: ""
   - match: "Windows 11 IoT Enterprise LTSC"
     name: win11-ltsc
     family: win11
     track: ltsc
+    latest_uup_uuid: ""
+    latest_uup_title: ""

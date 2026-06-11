@@ -1,0 +1,7 @@
+# Minimal install: 24H2 Pro, English, wim compression.
+# Build it once and reuse — no per-build flag juggling.
+product: win11-24h2
+edition: professional
+language: en-us
+compression: wim
+label: win11-min

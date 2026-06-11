@@ -2,21 +2,41 @@ name: build
 on:
   workflow_call:
     inputs:
+      # Profile is the canonical input. If set, all other fields are resolved from
+      # config/profiles/<profile>.yaml at job start.
+      profile:
+        required: false
+        type: string
+        default: ""
+      # Direct override inputs (for one-off builds that don't warrant a profile)
       product:
-        required: true
+        required: false
         type: string
+        default: ""
       edition:
-        required: true
+        required: false
         type: string
+        default: ""
+      language:
+        required: false
+        type: string
+        default: ""
+      compression:
+        required: false
+        type: string
+        default: ""
       label:
-        required: true
+        required: false
         type: string
+        default: ""
       uup_uuid:
-        required: true
+        required: false
         type: string
+        default: ""
       uup_title:
-        required: true
+        required: false
         type: string
+        default: ""
       autounattend_xml:
         required: false
         type: string
@@ -30,6 +50,13 @@ on:
         required: false
   repository_dispatch:
     types: [build-request]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile name from config/profiles/"
+        required: true
+        type: choice
+        options: []
 
 jobs:
   build:
@@ -38,9 +65,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      # Map both dispatch types to consistent env vars
+      # Resolve the profile (if given) into concrete env vars. Direct inputs
+      # override profile values, so a dispatch with `profile: win11-prod, edition:
+      # enterprise` works (and overrides only edition).
+      PROFILE: ${{ inputs.profile || github.event.client_payload.profile }}
       PRODUCT: ${{ inputs.product || github.event.client_payload.product }}
       EDITION: ${{ inputs.edition || github.event.client_payload.edition }}
+      LANGUAGE: ${{ inputs.language || github.event.client_payload.language }}
+      COMPRESSION: ${{ inputs.compression || github.event.client_payload.compression }}
       LABEL: ${{ inputs.label || github.event.client_payload.label }}
       UUP_UUID: ${{ inputs.uup_uuid || github.event.client_payload.uup_uuid }}
       UUP_TITLE: ${{ inputs.uup_title || github.event.client_payload.uup_title }}
@@ -56,6 +88,18 @@ jobs:
       - name: Install Python deps
         run: pip install -e .
 
+      - name: Resolve profile into build env vars
+        if: env.PROFILE != ''
+        id: profile
+        run: |
+          # Outputs to GITHUB_OUTPUT so the rest of the job sees resolved values
+          python -m scripts.profiles.load "$PROFILE" >> "$GITHUB_OUTPUT"
+          # Also export to env so shell expansions work
+          eval "$(python -m scripts.profiles.load "$PROFILE")"
+          for k in PRODUCT EDITION LANGUAGE COMPRESSION LABEL UUP_UUID UUP_TITLE; do
+            echo "  $k=${!k}"
+          done
+
       - name: Install system deps for UUP conversion
         run: |
           sudo apt-get update
@@ -69,9 +113,12 @@ jobs:
 
       - name: Download UUP files + convert to ISO
         shell: bash
+        env:
+          COMPRESSION: ${{ env.COMPRESSION }}
         run: |
           mkdir -p artifacts
-          bash scripts/build/convert.sh "$UUP_UUID" "$EDITION" artifacts/
+          # Pass compression through to convert.sh
+          bash scripts/build/convert.sh "$UUP_UUID" "$EDITION" artifacts/ "$COMPRESSION"
 
       - name: Inject Intel RST drivers into WIM
         shell: bash
@@ -108,9 +155,11 @@ jobs:
         run: |
           AUTOU="artifacts/autounattend/win11.xml"
           [ -f "$AUTOU" ] || AUTOU="autounattend/base.xml"
+          # Use the LABEL from the profile for the final ISO filename
+          OUT_NAME="${LABEL:-${PRODUCT}-${EDITION}}"
           bash scripts/build/repack.sh \
             artifacts/iso-in.iso \
-            "artifacts/win11-${EDITION}.iso" \
+            "artifacts/${OUT_NAME}.iso" \
             artifacts/install.wim \
             "$AUTOU"
 
@@ -119,7 +168,7 @@ jobs:
         shell: bash
         run: |
           echo "${{ secrets.ACCOUNTS_YAML }}" > /tmp/accounts.yaml
-          ACCOUNT=$(python -m scripts.rclone.assign "win11-24h2" "6.0" /tmp/accounts.yaml)
+          ACCOUNT=$(python -m scripts.rclone.assign "${PRODUCT}" "6.0" /tmp/accounts.yaml)
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
       - name: Upload ISO to Google Drive
@@ -130,8 +179,9 @@ jobs:
         run: |
           mkdir -p ~/.config/rclone
           printf '%s' "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
+          OUT_NAME="${LABEL:-${PRODUCT}-${EDITION}}"
           bash scripts/rclone/upload.sh \
-            "artifacts/win11-${EDITION}.iso" \
+            "artifacts/${OUT_NAME}.iso" \
             "${{ steps.assign.outputs.account }}" \
             "iso/${PRODUCT}/" \
             ~/.config/rclone/rclone.conf
@@ -140,7 +190,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: iso-${{ env.PRODUCT }}-${{ env.EDITION }}
+          name: iso-${{ env.LABEL || format('{0}-{1}', env.PRODUCT, env.EDITION) }}
           path: artifacts/*.iso
           retention-days: 7
           if-no-files-found: ignore

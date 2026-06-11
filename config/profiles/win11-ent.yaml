@@ -1,0 +1,8 @@
+# Per-edition enterprise: full SKU ladder for IT deployment scenarios.
+# Builds all enterprise variants in one shot by referencing a matrix.
+# (Matrix expansion is handled by the workflow; the profile just provides defaults.)
+product: win11-24h2
+edition: enterprise
+language: en-us
+compression: wim
+label: win11-ent

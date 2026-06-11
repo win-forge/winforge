@@ -25,6 +25,11 @@ editions:
       label: Windows 11 Enterprise
     - id: iotenterprise
       label: Windows 11 IoT Enterprise LTSC
+  win11-ltsc:
+    - id: iotenterprise
+      label: Windows 11 IoT Enterprise LTSC
+    - id: professional
+      label: Windows 11 Pro
   win10-22h2:
     - id: professional
       label: Windows 10 Pro
