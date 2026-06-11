@@ -92,12 +92,15 @@ jobs:
         if: env.PROFILE != ''
         id: profile
         run: |
-          # Outputs to GITHUB_OUTPUT so the rest of the job sees resolved values
-          python -m scripts.profiles.load "$PROFILE" >> "$GITHUB_OUTPUT"
-          # Also export to env so shell expansions work
-          eval "$(python -m scripts.profiles.load "$PROFILE")"
+          # Print only the exportable lines (KEY=val) to stdout for eval.
+          # All logging goes to stderr.
+          eval_lines=$(python -m scripts.profiles.load "$PROFILE" 2>/dev/null)
+          echo "$eval_lines" >> "$GITHUB_OUTPUT"
+          eval "$eval_lines"
+          echo "Resolved profile $PROFILE:"
           for k in PRODUCT EDITION LANGUAGE COMPRESSION LABEL UUP_UUID UUP_TITLE; do
-            echo "  $k=${!k}"
+            v=$(eval "echo \${$k}")
+            echo "  $k=$v"
           done
 
       - name: Install system deps for UUP conversion
