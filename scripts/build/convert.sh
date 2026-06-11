@@ -24,7 +24,16 @@ fi
 echo "[convert] Applying rename script (GUID -> friendly names)..."
 cd "$WORK/uup"
 if [ -f "uup_rename_windows.cmd" ]; then
-    cmd.exe //c "$(cygpath -w "$WORK/uup/uup_rename_windows.cmd")" 2>&1 | tail -5
+    if command -v cygpath >/dev/null 2>&1 && command -v cmd.exe >/dev/null 2>&1; then
+        # Windows runner: invoke via cmd.exe
+        cmd.exe //c "$(cygpath -w "$WORK/uup/uup_rename_windows.cmd")" 2>&1 | tail -5
+    else
+        # Linux: do the rename directly from the .cmd script's rename lines
+        echo "  (no Windows tools available; emulating rename from .cmd)"
+        grep -E '^rename ' uup_rename_windows.cmd | \
+            sed -E 's/rename "([^"]+)" "([^"]+)"/mv -v "\1" "\2"/' | \
+            bash 2>&1 | tail -10
+    fi
 elif [ -f "uup_rename_linux.sh" ]; then
     bash "$WORK/uup/uup_rename_linux.sh" 2>&1 | tail -5
 else
