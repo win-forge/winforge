@@ -61,7 +61,20 @@ cd - >/dev/null
 echo "[convert] Cloning UUP-dump converter..."
 if [ ! -d "$WORK/converter" ]; then
     # UUP-dump hosts their converter on their own Gitea, not GitHub
-    GIT_TERMINAL_PROMPT=0 git clone --depth=1 https://git.uupdump.net/uup-dump/converter.git "$WORK/converter" 2>&1 | tail -3
+    # The Gitea is occasionally flaky (522s). Retry 3x with backoff.
+    for i in 1 2 3; do
+        if GIT_TERMINAL_PROMPT=0 git clone --depth=1 https://git.uupdump.net/uup-dump/converter.git "$WORK/converter" 2>&1 | tail -3; then
+            [ -f "$WORK/converter/convert.sh" ] && break
+        fi
+        echo "[convert] Clone attempt $i failed, retrying in 5s..."
+        sleep 5
+        rm -rf "$WORK/converter"
+    done
+    if [ ! -f "$WORK/converter/convert.sh" ]; then
+        echo "[convert] ERROR: Could not clone UUP-dump converter after 3 attempts"
+        echo "[convert] The Gitea at git.uupdump.net may be down. Try again later."
+        exit 1
+    fi
 fi
 
 echo "[convert] Running UUP-dump converter (this takes 10-30 minutes)..."
