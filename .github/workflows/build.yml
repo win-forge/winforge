@@ -95,8 +95,9 @@ jobs:
           # Get unquoted KEY=val lines for GITHUB_ENV (env vars don't need quoting)
           # and quoted KEY="val" for shell eval (CLI consumers).
           eval_lines=$(python -m scripts.profiles.load "$PROFILE" 2>/dev/null)
-          # Strip surrounding quotes before writing to GITHUB_ENV
-          unquoted_lines=$(echo "$eval_lines" | sed 's/^"//; s/"$//')
+          # Strip the quoting that the script emits for shell eval safety.
+          # Lines look like: KEY="value" — we want KEY=value for GITHUB_ENV.
+          unquoted_lines=$(echo "$eval_lines" | sed 's/="\([^"]*\)"$/=\1/')
           echo "$unquoted_lines" >> "$GITHUB_ENV"
           # Also save to GITHUB_OUTPUT for downstream jobs (workflow_call etc.)
           echo "$eval_lines" >> "$GITHUB_OUTPUT"
