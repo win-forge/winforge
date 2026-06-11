@@ -92,11 +92,12 @@ jobs:
         if: env.PROFILE != ''
         id: profile
         run: |
-          # Print only the exportable lines (KEY=val) to stdout for eval.
-          # All logging goes to stderr.
+          # Get unquoted KEY=val lines for GITHUB_ENV (env vars don't need quoting)
+          # and quoted KEY="val" for shell eval (CLI consumers).
           eval_lines=$(python -m scripts.profiles.load "$PROFILE" 2>/dev/null)
-          # Export to GITHUB_ENV so subsequent steps see the values
-          echo "$eval_lines" >> "$GITHUB_ENV"
+          # Strip surrounding quotes before writing to GITHUB_ENV
+          unquoted_lines=$(echo "$eval_lines" | sed 's/^"//; s/"$//')
+          echo "$unquoted_lines" >> "$GITHUB_ENV"
           # Also save to GITHUB_OUTPUT for downstream jobs (workflow_call etc.)
           echo "$eval_lines" >> "$GITHUB_OUTPUT"
           echo "Resolved profile $PROFILE:"
