@@ -40,11 +40,11 @@ def test_build_workflow_supports_both_dispatch_types():
     assert "repository_dispatch" in trigger_names
 
 
-def test_build_workflow_runs_on_windows():
-    """build.yml must use windows-2022 (has oscdimg/7z preinstalled)."""
+def test_build_workflow_runs_on_ubuntu():
+    """build.yml must use ubuntu-latest (UUP converter needs wimlib, cabextract, etc.)."""
     data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
     jobs = data["jobs"]["build"]
-    assert "windows" in jobs["runs-on"]
+    assert "ubuntu" in jobs["runs-on"]
 
 
 def test_build_workflow_defines_required_secrets():
@@ -112,11 +112,11 @@ def test_convert_sh_signature():
     assert "scripts.uupd.download" in text
 
 
-def test_repack_sh_finds_oscdimg_from_windows_adk():
-    """repack.sh must look for oscdimg in Windows ADK paths."""
+def test_repack_sh_finds_iso_builder_from_multiple_sources():
+    """repack.sh must look for ISO builders: oscdimg (Windows ADK), xorriso, or genisoimage (Linux)."""
     text = (REPO_ROOT / "scripts/build/repack.sh").read_text()
-    assert "Windows Kits" in text
-    assert "Oscdimg" in text or "oscdimg" in text
+    # Must mention at least one of: xorriso, genisoimage, oscdimg
+    assert any(name in text for name in ("xorriso", "genisoimage", "oscdimg"))
 
 
 def test_repack_sh_falls_back_to_uefi_only_when_bios_boot_missing():
@@ -150,7 +150,8 @@ def test_build_pipeline_step_call_chain(tmp_path: Path):
 
     driver_step = find_step("Inject Intel RST drivers into WIM")
     assert driver_step is not None
-    assert "dism-helpers.ps1" in driver_step["run"]
+    # Now uses wimlib on Linux (was dism-helpers.ps1 on Windows)
+    assert "wimlib" in driver_step["run"] or "dism-helpers.ps1" in driver_step["run"]
 
     autou_step = find_step("Write rendered autounattend to disk")
     assert autou_step is not None

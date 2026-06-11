@@ -51,23 +51,22 @@ cd - >/dev/null
 # Use the UUP-dump converter (Windows version) which wraps DISM.
 echo "[convert] Cloning UUP-dump converter..."
 if [ ! -d "$WORK/converter" ]; then
-    GIT_TERMINAL_PROMPT=0 git clone --depth=1 https://github.com/uup-dump/converter.git "$WORK/converter" 2>&1 | tail -3
+    # UUP-dump hosts their converter on their own Gitea, not GitHub
+    GIT_TERMINAL_PROMPT=0 git clone --depth=1 https://git.uupdump.net/uup-dump/converter.git "$WORK/converter" 2>&1 | tail -3
 fi
 
 echo "[convert] Running UUP-dump converter (this takes 10-30 minutes)..."
-# The Windows .cmd variant is the most reliable in CI
-if [ -f "$WORK/converter/convert.cmd" ]; then
-    cp -r "$WORK/uup/"* "$WORK/converter/" 2>/dev/null || true
+# The Gitea repo only has convert.sh (Linux/macOS); it uses wimlib, cabextract, chntpw, genisoimage
+if [ -f "$WORK/converter/convert.sh" ]; then
+    # Copy UUP files into the converter's working dir (it expects a UUPs/ subdir)
+    mkdir -p "$WORK/converter/UUPs"
+    cp -r "$WORK/uup/"* "$WORK/converter/UUPs/" 2>/dev/null || true
     cd "$WORK/converter"
-    cmd.exe //c "$(cygpath -w "$WORK/converter/convert.cmd")" "$EDITION" amd64 2>&1 | tee "$OUTDIR/convert.log" | tail -30
-    cd - >/dev/null
-elif [ -f "$WORK/converter/convert.sh" ]; then
-    cp -r "$WORK/uup/"* "$WORK/converter/" 2>/dev/null || true
-    cd "$WORK/converter"
-    bash convert.sh "$EDITION" amd64 2>&1 | tee "$OUTDIR/convert.log" | tail -30
+    # Default: wim compression, UUPs/ dir, no virtual editions
+    bash convert.sh wim UUPs 0 2>&1 | tee "$OUTDIR/convert.log" | tail -30
     cd - >/dev/null
 else
-    echo "[convert] ERROR: UUP-dump converter has no convert.cmd or convert.sh"
+    echo "[convert] ERROR: UUP-dump converter missing convert.sh"
     ls "$WORK/converter/"
     exit 1
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Repack an ISO with a patched install.wim and autounattend.xml.
 # Usage: repack.sh <iso-in> <iso-out> <wim-in> <autounattend-xml>
-# Runs on Windows (Git Bash) or Linux.
+# Runs on Linux (uses xorriso/genisoimage) or Windows (oscdimg).
 set -euo pipefail
 
 ISO_IN="$1"
@@ -25,43 +25,69 @@ cp "$AUTOU" "$WORK/autounattend.xml"
 BIOS_BOOT="$WORK/boot/etfsboot.com"
 UEFI_BOOT="$WORK/efi/microsoft/boot/efisys.bin"
 
-if [ ! -f "$BIOS_BOOT" ]; then
-    echo "[repack] WARN: etfsboot.com not found, building UEFI-only ISO"
-fi
 if [ ! -f "$UEFI_BOOT" ]; then
-    echo "[repack] ERROR: efisys.bin not found"
+    echo "[repack] ERROR: efisys.bin not found in ISO"
     exit 1
 fi
 
-# Find oscdimg — prefer Windows SDK, then PATH
-OSCDIMG=""
-for candidate in \
-    "/c/Program Files (x86)/Windows Kits/10/Assessment and Deployment Kit/Deployment Tools/amd64/Oscdimg/oscdimg.exe" \
-    "/c/Program Files (x86)/Windows Kits/10/Assessment and Deployment Kit/Deployment Tools/x86/Oscdimg/oscdimg.exe" \
-    "oscdimg"; do
-    if [ -f "$candidate" ] || command -v "$candidate" >/dev/null 2>&1; then
-        OSCDIMG="$candidate"
-        break
+# Pick the ISO builder: oscdimg (Windows), xorriso (Linux, preferred), genisoimage (fallback)
+ISO_BUILDER=""
+if command -v oscdimg >/dev/null 2>&1; then
+    ISO_BUILDER="oscdimg"
+elif command -v xorriso >/dev/null 2>&1; then
+    ISO_BUILDER="xorriso"
+elif command -v genisoimage >/dev/null 2>&1; then
+    ISO_BUILDER="genisoimage"
+fi
+
+if [ -z "$ISO_BUILDER" ]; then
+    echo "[repack] ERROR: no ISO builder found (need oscdimg, xorriso, or genisoimage)"
+    exit 1
+fi
+
+echo "[repack] Building ISO with $ISO_BUILDER: $ISO_OUT"
+
+if [ "$ISO_BUILDER" = "oscdimg" ]; then
+    if [ -f "$BIOS_BOOT" ]; then
+        oscdimg -m -o -u2 -udfver102 \
+            -bootdata:2#p0,e,b"$BIOS_BOOT"#pEF,e,b"$UEFI_BOOT" \
+            "$WORK" "$ISO_OUT"
+    else
+        oscdimg -m -o -u2 -udfver102 \
+            -bootdata:1#pEF,e,b"$UEFI_BOOT" \
+            "$WORK" "$ISO_OUT"
     fi
-done
-
-if [ -z "$OSCDIMG" ]; then
-    echo "[repack] ERROR: oscdimg not found. Install Windows ADK or add oscdimg to PATH."
-    exit 1
-fi
-
-echo "[repack] Building ISO with oscdimg: $ISO_OUT"
-
-if [ -f "$BIOS_BOOT" ]; then
-    # Dual-boot (BIOS + UEFI)
-    "$OSCDIMG" -m -o -u2 -udfver102 \
-        -bootdata:2#p0,e,b"$BIOS_BOOT"#pEF,e,b"$UEFI_BOOT" \
-        "$WORK" "$ISO_OUT"
-else
-    # UEFI-only
-    "$OSCDIMG" -m -o -u2 -udfver102 \
-        -bootdata:1#pEF,e,b"$UEFI_BOOT" \
-        "$WORK" "$ISO_OUT"
+elif [ "$ISO_BUILDER" = "xorriso" ]; then
+    # xorriso: UEFI-only via -isohybrid-mbr or via El Torito + EFI
+    xorriso -as mkisofs \
+        -o "$ISO_OUT" \
+        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -b boot/etfsboot.com \
+        -no-emul-boot \
+        -boot-load-size 8 \
+        -boot-info-table \
+        --grub2-boot-info \
+        -eltorito-alt-boot \
+        -e efi/microsoft/boot/efisys.bin \
+        -no-emul-boot \
+        -isohybrid-gpt-basdat \
+        -V "CCCOMA_X64FRE_EN-US_DV9" \
+        "$WORK" 2>&1 | tail -3 || {
+        # Fallback: simpler invocation
+        xorriso -as mkisofs \
+            -o "$ISO_OUT" \
+            -e efi/microsoft/boot/efisys.bin \
+            -no-emul-boot \
+            -isohybrid-gpt-basdat \
+            "$WORK" 2>&1 | tail -3
+    }
+elif [ "$ISO_BUILDER" = "genisoimage" ]; then
+    # genisoimage: simpler, UEFI-only is most reliable
+    genisoimage -o "$ISO_OUT" \
+        -V "CCCOMA_X64FRE_EN-US_DV9" \
+        -b efi/microsoft/boot/efisys.bin \
+        -no-emul-boot \
+        "$WORK" 2>&1 | tail -3
 fi
 
 echo "[repack] ISO created: $ISO_OUT ($(du -h "$ISO_OUT" | cut -f1))"

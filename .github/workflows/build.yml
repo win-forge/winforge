@@ -33,8 +33,10 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
-    timeout-minutes: 120
+    # Ubuntu: UUP-dump converter uses wimlib, cabextract, chntpw, genisoimage
+    # (Linux-only). Windows runner doesn't have these without manual install.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       # Map both dispatch types to consistent env vars
       PRODUCT: ${{ inputs.product || github.event.client_payload.product }}
@@ -54,6 +56,13 @@ jobs:
       - name: Install Python deps
         run: pip install -e .
 
+      - name: Install system deps for UUP conversion
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage xorriso isolinux uuid-runtime
+          # xorriso needs isohdpfx.bin from isolinux for hybrid MBR
+          ls -la /usr/lib/ISOLINUX/isohdpfx.bin || sudo apt-get install -y syslinux-common
+
       - name: Sync Intel RST drivers
         shell: bash
         run: python scripts/drivers/sync_intel_rst.py
@@ -65,27 +74,27 @@ jobs:
           bash scripts/build/convert.sh "$UUP_UUID" "$EDITION" artifacts/
 
       - name: Inject Intel RST drivers into WIM
-        shell: pwsh
+        shell: bash
         run: |
-          $wim = "artifacts/install.wim"
-          if (-not (Test-Path $wim)) {
-            Write-Host "No install.wim found — extracting from ISO"
-            7z x artifacts/iso-in.iso -oartifacts/iso-extract -bd -y | Out-Null
-            Copy-Item artifacts/iso-extract/sources/install.wim $wim
-          }
-          $mount = "artifacts/mount"
-          $driverDirs = @()
-          $rstRoot = "drivers/pack/intel-rst"
-          if (Test-Path $rstRoot) {
-            Get-ChildItem -Recurse -Directory $rstRoot |
-              Where-Object { Test-Path (Join-Path $_.FullName "iaStorAC.inf") } |
-              ForEach-Object { $driverDirs += $_.FullName }
-          }
-          if ($driverDirs.Count -gt 0) {
-            ./scripts/build/dism-helpers.ps1 -WimPath $wim -MountDir $mount -DriverDirs $driverDirs
-          } else {
-            Write-Host "No Intel RST drivers found — skipping injection"
-          }
+          WIM="artifacts/install.wim"
+          if [ ! -f "$WIM" ]; then
+            echo "No install.wim found — extracting from ISO"
+            7z x artifacts/iso-in.iso -oartifacts/iso-extract -bd -y >/dev/null
+            cp artifacts/iso-extract/sources/install.wim "$WIM"
+          fi
+          # wimlib can inject drivers on Linux without DISM
+          RST_ROOT="drivers/pack/intel-rst"
+          if [ -d "$RST_ROOT" ]; then
+            DRIVERS=$(find "$RST_ROOT" -name "iaStorAC.inf" -printf '%h\n' | head -1)
+            if [ -n "$DRIVERS" ]; then
+              echo "Injecting driver from: $DRIVERS"
+              wimlib-imagex update "$WIM" 1 --command="add-driver $DRIVERS" 2>&1 | tail -3
+            else
+              echo "No iaStorAC.inf found in $RST_ROOT — skipping driver injection"
+            fi
+          else
+            echo "No Intel RST drivers synced — skipping injection"
+          fi
 
       - name: Write rendered autounattend to disk
         if: env.AUTOU_XML != ''
