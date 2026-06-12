@@ -1,5 +1,9 @@
 name: release
 
+# GITHUB_TOKEN's default permissions don't include releases; explicit grant.
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -11,8 +15,6 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # create the tag + release
     steps:
       - uses: actions/checkout@v6
         with:
