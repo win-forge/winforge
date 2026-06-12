@@ -100,6 +100,32 @@ jobs:
           # (~0GB) but explicit-true keeps the action deterministic.
           remove-docker-images: 'true'
 
+      # The action above frees / and /mnt, but the runner's *own* log volume
+      # (where _diag/Worker logs are written) is a separate filesystem that
+      # can fill up on long-running builds and cause the runner to crash
+      # mid-step with ENOSPC. Clear old logs + caches from the runner volume
+      # too. Must run AFTER the maximize-build-space step (which may need
+      # /mnt for loopback images) but BEFORE the build (which produces logs).
+      - name: Clear runner diagnostic logs + cache
+        shell: bash
+        run: |
+          echo "Runner volume before cleanup:"
+          df -h /home/runner 2>/dev/null || df -h / || true
+          # Truncate _diag logs to 0 bytes (preserves file handles the runner
+          # has open, but releases the disk blocks)
+          sudo find /home/runner -path '*/_diag/Worker_*.log' -size +10M \
+            -exec sudo truncate -s 0 {} \; 2>/dev/null || true
+          # Remove old run cache dirs (anything older than the current run id)
+          # The runner is _diag/<version>/_diag/Worker_<runid>.log; we keep
+          # only the most recent one. Older versions' diag logs are dead weight.
+          sudo find /home/runner -path '*/actions-runner/cached/*/_diag/Worker_*.log' \
+            -mmin +5 -delete 2>/dev/null || true
+          # Optional: remove pre-installed toolchains we don't need (Python
+          # is reinstalled by setup-python@v6 below, so this is safe to clear)
+          sudo rm -rf /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          echo "Runner volume after cleanup:"
+          df -h /home/runner 2>/dev/null || df -h / || true
+
       - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
