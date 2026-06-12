@@ -42,6 +42,9 @@ jobs:
             echo "Release $TAG already exists; skipping"
             exit 0
           fi
+          # Resolve the tag to its commit SHA (--target needs SHA, not tag name)
+          TAG_SHA=$(git rev-parse "$TAG^{commit}")
+          echo "Tag $TAG points at $TAG_SHA"
           # Auto-generate release notes from the commits since the previous tag
           PREV=$(git tag --sort=-version:refname | grep -v "^$TAG$" | head -1)
           if [ -n "$PREV" ]; then
@@ -54,5 +57,5 @@ jobs:
           gh release create "$TAG" \
             --title "WinForge $TAG" \
             --notes "$NOTES" \
-            --target "$TAG"
+            --target "$TAG_SHA"
           echo "Created release $TAG"
