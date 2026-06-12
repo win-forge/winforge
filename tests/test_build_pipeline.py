@@ -158,6 +158,18 @@ def test_repack_sh_falls_back_to_uefi_only_when_bios_boot_missing():
     assert "UEFI-only" in text or "UEFI_only" in text or "efisys" in text
 
 
+def test_repack_sh_uses_workspace_for_temp_dir():
+    """repack.sh must use $GITHUB_WORKSPACE (not /tmp) for temp work.
+
+    Extracting a 4.5GB ISO and rebuilding a 4.5GB ISO needs ~10GB of
+    temp space. /tmp is on /dev/root, which is cramped after the LVM
+    image consumed 87GB of the 89GB previously free.
+    """
+    text = (REPO_ROOT / "scripts/build/repack.sh").read_text()
+    assert "GITHUB_WORKSPACE" in text
+    assert "mktemp -d -p" in text or "WORKDIR=" in text
+
+
 # --- Pipeline integration: simulate the full build graph ---
 
 def test_build_pipeline_step_call_chain(tmp_path: Path):

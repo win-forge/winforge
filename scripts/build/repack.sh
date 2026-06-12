@@ -9,7 +9,13 @@ ISO_OUT="$2"
 WIM_IN="$3"
 AUTOU="$4"
 
-WORK=$(mktemp -d)
+# Put temp work in $WORKDIR (defaults to $GITHUB_WORKSPACE if set, else /tmp).
+# $GITHUB_WORKSPACE is the LVM-mounted volume from maximize-build-space
+# (~100GB usable). /tmp lives on /dev/root which is cramped after the LVM
+# image is allocated. Extracting a 4.5GB ISO and rebuilding a 4.5GB ISO
+# needs ~10GB of temp space.
+WORKDIR="${WORKDIR:-${GITHUB_WORKSPACE:-/tmp}}"
+WORK=$(mktemp -d -p "$WORKDIR")
 trap 'rm -rf "$WORK"' EXIT
 
 echo "[repack] Extracting ISO: $ISO_IN"
