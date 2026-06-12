@@ -47,6 +47,48 @@ def test_build_workflow_runs_on_ubuntu():
     assert "ubuntu" in jobs["runs-on"]
 
 
+def test_build_workflow_supports_workflow_call_for_caller_repo():
+    """build.yml must work as a reusable workflow from a config repo.
+
+    WinForge is consumed via `uses: phantomic12/winforge/.github/workflows/
+    build.yml@v1` from a separate config repo. The build workflow must:
+    - Define workflow_call as a trigger
+    - Accept the inputs the consumer passes (profile, etc.)
+    - Forward secrets (RCLONE_CONF, ACCOUNTS_YAML) to the call
+    - Check out the caller's repo (the workflow_call runner) for config/
+    - Check out winforge itself for scripts/
+    """
+    data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
+    triggers = data.get("on", data.get(True, {}))
+    if isinstance(triggers, list):
+        trigger_names = triggers
+    else:
+        trigger_names = list(triggers.keys())
+    assert "workflow_call" in trigger_names, "build.yml must support workflow_call"
+
+    # Inputs include the canonical profile + the override fields
+    wc = triggers["workflow_call"]
+    inputs = wc.get("inputs", {})
+    assert "profile" in inputs
+    for k in ("product", "edition", "language", "compression", "label",
+              "uup_uuid", "uup_title", "autounattend_xml", "config_root",
+              "winforge_ref"):
+        assert k in inputs, f"build.yml workflow_call input missing: {k}"
+
+    # The secrets block requires RCLONE_CONF and ACCOUNTS_YAML
+    secrets = wc.get("secrets", {})
+    assert "RCLONE_CONF" in secrets
+    assert "ACCOUNTS_YAML" in secrets
+
+    # The job must include a checkout step that handles caller mode
+    # (workflow_call -> checkout winforge into .winforge/)
+    text = (WORKFLOWS_DIR / "build.yml").read_text()
+    assert ".winforge" in text, "build.yml must checkout winforge into .winforge/ for caller mode"
+    assert "phantomic12/winforge" in text, "build.yml must reference the winforge repo for caller checkout"
+    # And the install step must support both modes
+    assert "if [ -d .winforge" in text, "build.yml must branch on caller vs self-build mode"
+
+
 def test_build_workflow_defines_required_secrets():
     """build.yml must require RCLONE_CONF + ACCOUNTS_YAML (called by secret_inherit)."""
     data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())

@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import subprocess
 import sys
 import textwrap
@@ -15,6 +16,22 @@ from scripts.profiles.load import (
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILES_DIR = REPO_ROOT / "config" / "profiles"
+
+
+@pytest.fixture(autouse=True)
+def _reset_config_root():
+    """Reset the module-level CONFIG_ROOT before each test.
+
+    Some tests monkeypatch WINFORGE_CONFIG_ROOT. Without this fixture,
+    the constants stay stale from the previous test.
+    """
+    # Make sure the env var doesn't leak from another test
+    os.environ.pop("WINFORGE_CONFIG_ROOT", None)
+    from scripts.profiles import load
+    load.reset_config_root()
+    yield
+    os.environ.pop("WINFORGE_CONFIG_ROOT", None)
+    load.reset_config_root()
 
 
 def test_profile_name_regex_validates_form():
@@ -47,6 +64,49 @@ def test_load_returns_profile_with_defaults():
     assert p.compression == "wim"
     # label defaults to name
     assert p.label == "win11-prod"
+
+
+def test_find_config_root_resolves_to_config_subdir(monkeypatch, tmp_path: Path):
+    """When WINFORGE_CONFIG_ROOT points at a repo root, return its config/ subdir.
+
+    This is the caller-mode case: the consumer sets WINFORGE_CONFIG_ROOT to
+    their repo root, and we auto-append /config to find profiles.
+    """
+    # Set up a fake config dir
+    (tmp_path / "config" / "profiles").mkdir(parents=True)
+    (tmp_path / "config" / "products.yaml").write_text("products: []")
+    (tmp_path / "config" / "editions.yaml").write_text("editions: {}")
+
+    monkeypatch.setenv("WINFORGE_CONFIG_ROOT", str(tmp_path))
+    from scripts.profiles import load
+    load.reset_config_root()
+    assert load.CONFIG_ROOT == tmp_path / "config"
+    assert load.PROFILES_DIR == tmp_path / "config" / "profiles"
+
+
+def test_find_config_root_resolves_to_pointed_path_when_no_config_subdir(
+    monkeypatch, tmp_path: Path
+):
+    """If WINFORGE_CONFIG_ROOT points at the config dir itself (no config/ inside), use it directly."""
+    (tmp_path / "profiles").mkdir()
+    monkeypatch.setenv("WINFORGE_CONFIG_ROOT", str(tmp_path))
+    from scripts.profiles import load
+    load.reset_config_root()
+    assert load.CONFIG_ROOT == tmp_path
+    assert load.PROFILES_DIR == tmp_path / "profiles"
+
+
+def test_find_config_root_relative_to_workspace(monkeypatch, tmp_path: Path):
+    """Relative WINFORGE_CONFIG_ROOT is resolved against $GITHUB_WORKSPACE."""
+    (tmp_path / "config" / "profiles").mkdir(parents=True)
+    (tmp_path / "config" / "products.yaml").write_text("products: []")
+    (tmp_path / "config" / "editions.yaml").write_text("editions: {}")
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("WINFORGE_CONFIG_ROOT", ".")
+    from scripts.profiles import load
+    load.reset_config_root()
+    assert load.CONFIG_ROOT == tmp_path / "config"
 
 
 def test_load_ltsc_profile_has_esd_compression():

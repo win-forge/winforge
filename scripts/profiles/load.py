@@ -19,6 +19,7 @@ Schema:
     uup_title: <override>       # optional: human-readable title for the pinned build
 """
 from __future__ import annotations
+import os
 from dataclasses import dataclass
 from pathlib import Path
 import argparse
@@ -28,9 +29,82 @@ import yaml
 
 from scripts.lib.log import info, error
 
-PROFILES_DIR = Path(__file__).parent.parent.parent / "config" / "profiles"
-PRODUCTS_FILE = Path(__file__).parent.parent.parent / "config" / "products.yaml"
-EDITIONS_FILE = Path(__file__).parent.parent.parent / "config" / "editions.yaml"
+
+def _find_config_root() -> Path:
+    """Locate the config root for the active build.
+
+    Resolution order:
+    1. $WINFORGE_CONFIG_ROOT env var (caller-supplied). May be:
+       - An absolute path to a directory that *contains* config/ (e.g.
+         $GITHUB_WORKSPACE). PROFILES_DIR becomes $WINFORGE_CONFIG_ROOT/config/profiles.
+       - Or an absolute path to the config/ directory itself. PROFILES_DIR
+         becomes $WINFORGE_CONFIG_ROOT/profiles.
+       The function detects which case by checking whether the path
+       contains a 'config' subdirectory.
+    2. ./config (self-build on winforge repo)
+    3. ./.winforge/config (caller mode with default checkout layout)
+
+    Returns the path to the config/ directory itself.
+    """
+    explicit = os.environ.get("WINFORGE_CONFIG_ROOT", "").strip()
+    if explicit:
+        p = Path(explicit)
+        if not p.is_absolute():
+            workspace = os.environ.get("GITHUB_WORKSPACE") or os.getcwd()
+            p = Path(workspace) / p
+        p = p.resolve()
+        # If the explicit path is the repo root (contains a config/ subdir),
+        # use that. Otherwise assume it points AT the config dir.
+        if (p / "config").is_dir():
+            return p / "config"
+        return p
+
+    cwd = Path(os.getcwd()).resolve()
+    for candidate in (cwd / "config", cwd / ".winforge" / "config"):
+        if candidate.is_dir():
+            return candidate
+    # Fallback: behave as if ./config existed (load() will surface a clear error)
+    return cwd / "config"
+
+
+def _products_file(root: Path) -> Path:
+    # Caller's config may not have products.yaml — fall back to the winforge
+    # vendored one so self-build still validates against a known product list.
+    if (root / "products.yaml").is_file():
+        return root / "products.yaml"
+    if (root.parent / ".winforge" / "config" / "products.yaml").is_file():
+        return root.parent / ".winforge" / "config" / "products.yaml"
+    # Last-resort: same as root (will error cleanly if missing)
+    return root / "products.yaml"
+
+
+def _editions_file(root: Path) -> Path:
+    if (root / "editions.yaml").is_file():
+        return root / "editions.yaml"
+    if (root.parent / ".winforge" / "config" / "editions.yaml").is_file():
+        return root.parent / ".winforge" / "config" / "editions.yaml"
+    return root / "editions.yaml"
+
+
+# Module-level constants. Set at module load via the helpers above.
+# Tests that need to change the config root should call reset_config_root() first.
+CONFIG_ROOT: Path = _find_config_root()
+PROFILES_DIR: Path = CONFIG_ROOT / "profiles"
+PRODUCTS_FILE: Path = _products_file(CONFIG_ROOT)
+EDITIONS_FILE: Path = _editions_file(CONFIG_ROOT)
+
+
+def reset_config_root() -> None:
+    """Re-resolve CONFIG_ROOT / PROFILES_DIR / etc. from current env + cwd.
+
+    Useful in tests that monkeypatch WINFORGE_CONFIG_ROOT. Call before
+    asserting on the module-level constants.
+    """
+    global CONFIG_ROOT, PROFILES_DIR, PRODUCTS_FILE, EDITIONS_FILE
+    CONFIG_ROOT = _find_config_root()
+    PROFILES_DIR = CONFIG_ROOT / "profiles"
+    PRODUCTS_FILE = _products_file(CONFIG_ROOT)
+    EDITIONS_FILE = _editions_file(CONFIG_ROOT)
 
 # Field constraints
 _VALID_COMPRESSION = ("wim", "esd")
