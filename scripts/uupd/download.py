@@ -134,10 +134,12 @@ def download_files(inputs: ConversionInputs, output_dir: Path) -> list[Path]:
     # Run aria2
     result = subprocess.run(
         ["aria2c", "-c", "-x4", "-s4", "--dir", str(output_dir), "-i", str(arena_input)],
-        capture_output=True, text=True
+        capture_output=True, text=True, timeout=600,  # 10 min cap on the download
     )
     if result.returncode != 0:
-        raise RuntimeError(f"aria2 failed:\n{result.stderr}")
+        # aria2 sometimes writes error details to stdout, not stderr
+        err = (result.stderr or "").strip() or (result.stdout or "").strip() or "(no output)"
+        raise RuntimeError(f"aria2 failed (rc={result.returncode}):\n{err}")
 
     # Write the rename script
     if inputs.rename_cmd:
