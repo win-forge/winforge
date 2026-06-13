@@ -51,7 +51,7 @@ jobs:
           PREV=$(git tag --sort=-version:refname | grep -v "^$TAG$" | head -1)
           if [ -n "$PREV" ]; then
             RANGE="$PREV..$TAG"
-            NOTES="## Changes\n\nSee the commits between [$PREV](https://github.com/phantomic12/winforge/compare/$PREV...$TAG) and $TAG.\n\nCommits:\n"
+            NOTES="## Changes\n\nSee the commits between [$PREV](https://github.com/win-forge/winforge/compare/$PREV...$TAG) and $TAG.\n\nCommits:\n"
             NOTES+=$(git log --pretty=format:"- %s (%h)" "$RANGE")
           else
             NOTES="Initial release."

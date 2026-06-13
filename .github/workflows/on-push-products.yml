@@ -82,12 +82,12 @@ jobs:
           fi
           # Build client_payload as JSON (gh api -f doesn't handle commas in values well)
           PAYLOAD=$(python3 -c "import json,sys; print(json.dumps({'products': '$PRODUCTS'.split(',')}))")
-          echo "Dispatching product-updated to phantomic12/winforge-configs: $PRODUCTS"
+          echo "Dispatching product-updated to win-forge/winforge-configs: $PRODUCTS"
           curl -sS -X POST \
             -H "Authorization: token $WINFORGE_CONFIGS_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/json" \
-            "https://api.github.com/repos/phantomic12/winforge-configs/dispatches" \
+            "https://api.github.com/repos/win-forge/winforge-configs/dispatches" \
             -d "{\"event_type\": \"product-updated\", \"client_payload\": $PAYLOAD}"
           echo
           echo "Dispatched."

@@ -50,7 +50,7 @@ def test_build_workflow_runs_on_ubuntu():
 def test_build_workflow_supports_workflow_call_for_caller_repo():
     """build.yml must work as a reusable workflow from a config repo.
 
-    WinForge is consumed via `uses: phantomic12/winforge/.github/workflows/
+    WinForge is consumed via `uses: win-forge/winforge/.github/workflows/
     build.yml@v1` from a separate config repo. The build workflow must:
     - Define workflow_call as a trigger
     - Accept the inputs the consumer passes (profile, etc.)
@@ -84,7 +84,7 @@ def test_build_workflow_supports_workflow_call_for_caller_repo():
     # (workflow_call -> checkout winforge into .winforge/)
     text = (WORKFLOWS_DIR / "build.yml").read_text()
     assert ".winforge" in text, "build.yml must checkout winforge into .winforge/ for caller mode"
-    assert "phantomic12/winforge" in text, "build.yml must reference the winforge repo for caller checkout"
+    assert "win-forge/winforge" in text, "build.yml must reference the winforge repo for caller checkout"
     # In self-build mode, the default checkout is winforge itself, and
     # we symlink .winforge -> . to make the rest of the steps uniform.
     assert ".winforge" in text, "build.yml must use .winforge as the unified scripts path"
@@ -158,7 +158,7 @@ def test_on_push_products_dispatches_to_configs_repo():
     )
     # The job must dispatch to winforge-configs
     text = json.dumps(data)
-    assert "phantomic12/winforge-configs" in text
+    assert "win-forge/winforge-configs" in text
     assert "dispatches" in text
     # Uses WINFORGE_CONFIGS_TOKEN (not WINFORGE_PRIVATE_TOKEN which is the old name)
     assert "WINFORGE_CONFIGS_TOKEN" in text

@@ -59,7 +59,7 @@ on:
       ACCOUNTS_YAML:
         required: true
   # Allow direct triggers on the winforge repo itself (legacy / self-build mode).
-  # When a user calls `uses: phantomic12/winforge/.github/workflows/build.yml@v1`,
+  # When a user calls `uses: win-forge/winforge/.github/workflows/build.yml@v1`,
   # only workflow_call fires. These other triggers let winforge build itself
   # without needing a separate config repo.
   repository_dispatch:
@@ -149,7 +149,7 @@ jobs:
       # 1. workflow_call (called from a config repo):
       #    - Default checkout checks out the CALLER (config repo) at the root
       #    - We need winforge's scripts; checkout winforge into .winforge/
-      # 2. repository_dispatch / workflow_dispatch on phantomic12/winforge:
+      # 2. repository_dispatch / workflow_dispatch on win-forge/winforge:
       #    - Default checkout checks out winforge itself at the root
       #    - scripts/ + config/ are already at repo root
       # 3. repository_dispatch / workflow_dispatch on a non-winforge repo
@@ -187,7 +187,7 @@ jobs:
         if: steps.detect.outputs.is_winforge == 'false'
         uses: actions/checkout@v6
         with:
-          repository: phantomic12/winforge
+          repository: win-forge/winforge
           ref: ${{ env.WINFORGE_REF }}
           path: .winforge
 

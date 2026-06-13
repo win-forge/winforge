@@ -4,7 +4,7 @@ Polls [UUP-dump](https://uupdump.net), rebuilds Windows 10/11 ISOs for a matrix 
 
 ## Two-Repo Architecture
 
-**This repo (`phantomic12/winforge`)** is the *tool*. It contains:
+**This repo (`win-forge/winforge`)** is the *tool*. It contains:
 - The reusable workflow (`.github/workflows/build.yml`)
 - The build scripts (`scripts/`)
 - The vendored default autounattend template (`autounattend/base.xml`)
@@ -12,7 +12,7 @@ Polls [UUP-dump](https://uupdump.net), rebuilds Windows 10/11 ISOs for a matrix 
 
 You do **not** fork this repo to use WinForge.
 
-**[phantomic12/winforge-configs](https://github.com/phantomic12/winforge-configs)** is the *config repo*. It contains:
+**[win-forge/winforge-configs](https://github.com/win-forge/winforge-configs)** is the *config repo*. It contains:
 - Your build profiles (`config/profiles/*.yaml`)
 - Your autounattend templates (`autounattend/*.xml`)
 - A thin workflow that calls winforge's reusable workflow
@@ -37,7 +37,7 @@ repo stays up-to-date independently and your config repo just tracks a
 
 ```bash
 # 1. Create your config repo from the template
-gh repo create myorg/my-winforge-configs --template phantomic12/winforge-configs --public
+gh repo create myorg/my-winforge-configs --template win-forge/winforge-configs --public
 
 # 2. Set secrets on YOUR repo (not on winforge)
 gh secret set RCLONE_CONF -R myorg/my-winforge-configs < ~/.config/rclone/rclone.conf
@@ -62,7 +62,7 @@ You can also run builds directly on this repo using `repository_dispatch` or
 
 ```bash
 # Trigger via the winforge repo itself
-gh api repos/phantomic12/winforge/dispatches \
+gh api repos/win-forge/winforge/dispatches \
   -f event_type=build-request \
   -f client_payload[profile]=win11-prod
 ```
@@ -100,13 +100,13 @@ Bump the ref in your config repo's `.github/workflows/build.yml`:
 
 ```yaml
 # Stable (recommended for production)
-uses: phantomic12/winforge/.github/workflows/build.yml@v1
+uses: win-forge/winforge/.github/workflows/build.yml@v1
 
 # Bleeding edge
-uses: phantomic12/winforge/.github/workflows/build.yml@main
+uses: win-forge/winforge/.github/workflows/build.yml@main
 
 # Exact pin
-uses: phantomic12/winforge/.github/workflows/build.yml@a1b2c3d
+uses: win-forge/winforge/.github/workflows/build.yml@a1b2c3d
 ```
 
 Renovate / Dependabot will detect new tags and open PRs on your config repo.

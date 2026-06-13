@@ -45,7 +45,7 @@ challenge). See `scripts/drivers/sync_intel_rst.py` for the graceful-skip
 behavior.
 
 Set these at: **Settings → Secrets and variables → Actions → New repository secret**
-on this repo (`phantomic12/winforge`).
+on this repo (`win-forge/winforge`).
 
 If a placeholder is referenced in a template but the corresponding secret is
 not set, the build fails with a clear error listing the missing variables.
