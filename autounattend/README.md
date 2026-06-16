@@ -6,9 +6,9 @@ separate private repo is required.
 
 ## How it works
 
-1. `autounattend/base.xml` — generic OOBE-skip template, has `{{LOCAL_ADMIN_NAME}}` + `{{LOCAL_ADMIN_PASS}}` placeholders
+1. `autounattend/base.xml` — generic OOBE-skip template, has `{{LOCAL_ADMIN_NAME}}` + `{{LOCAL_ADMIN_PASS}}` placeholders. **Carries the Win11 system-requirement bypass** — writes `LabConfig\BypassTPMCheck` / `BypassSecureBootCheck` / `BypassRAMCheck` in the `windowsPE` pass. See [`docs/bypass.md`](../docs/bypass.md).
 2. `autounattend/oobe-skip.xml` — even-shorter template, no placeholders (used as a no-credential fallback)
-3. `autounattend/<product>.xml` — optional per-product override (e.g. `win11-24h2.xml`, `win11-ltsc.xml`). Must live in this repo.
+3. `autounattend/<product>.xml` — optional per-product override (e.g. `win11-24h2.xml`, `win11-ltsc.xml`). Must live in this repo. **Should also carry the Win11 bypass `RunSynchronousCommand` block** if it's a Win11 product — copy the `<RunSynchronousCommand>` triple from `base.xml`.
 4. Build workflow's `Render autounattend from template + secrets` step picks `autounattend/${PRODUCT}.xml` (or falls back to `base.xml`), reads the secrets listed below, and renders the result. Rendered XML is written to `artifacts/autounattend/win11.xml` for the repack step.
 
 ## Placeholder variables
@@ -38,6 +38,8 @@ If a template contains no `{{...}}` placeholders, it's copied verbatim
 | `PRODUCT_KEY` | Rendered into `{{PRODUCT_KEY}}` |
 | `RCLONE_CONF` | rclone config (Google Drive accounts) — used by upload step |
 | `ACCOUNTS_YAML` | `config/accounts.yaml` content (OneDrive/Google Drive account pool) — used by assign step |
+| `GOFILE_TOKEN` | gofile.io JWT — used by `scripts/gofile/upload.py`. Optional, see [`docs/gofile.md`](../docs/gofile.md) |
+| `BYPASS_DLLS_B64` | base64 tarball of bypass DLLs — used by `scripts/build/bypass_win11_requirements.py`. Optional, see [`docs/bypass.md`](../docs/bypass.md) |
 
 **`INTEL_RST_TOKEN` is not required.** Intel RST driver injection is opt-in
 and silently skipped if Intel's download CDN blocks the runner (WAF

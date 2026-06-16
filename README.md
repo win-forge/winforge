@@ -1,6 +1,6 @@
 # WinForge — Windows ISO Build Pipeline (Reusable Workflow)
 
-Polls [UUP-dump](https://uupdump.net), rebuilds Windows 10/11 ISOs for a matrix of editions whenever Microsoft ships cumulative updates. Injects Intel RST/VMD NVMe drivers, drops in an `autounattend.xml` for hands-off install, and uploads finished ISOs to a fleet of Google Drive accounts via rclone.
+Polls [UUP-dump](https://uupdump.net), rebuilds Windows 10/11 ISOs for a matrix of editions whenever Microsoft ships cumulative updates. Injects Intel RST/VMD NVMe drivers, drops in an `autounattend.xml` for hands-off install, **bypasses the Win11 system-requirement check** (registry + DLL patch), and uploads finished ISOs to **gofile.io** (and optionally a pool of Google Drive accounts via rclone).
 
 ## Two-Repo Architecture
 
@@ -74,9 +74,10 @@ gh api repos/win-forge/winforge/dispatches \
 3. **Renders `{{PLACEHOLDER}}` tokens** in the autounattend template against GitHub Actions Secrets from the caller's repo.
 4. **Downloads UUPs** → runs the UUP-dump converter → produces a stock ISO.
 5. **Injects Intel RST drivers** into the WIM (gracefully skips if Intel's CDN WAF-blocks the request).
-6. **Repacks the ISO** with the rendered autounattend baked in.
-7. **Uploads to Google Drive** via rclone using one of a pool of accounts.
-8. **Uploads ISO as a debug artifact** (7-day retention).
+6. **Bypasses the Win11 system-requirement check** (TPM 2.0 / Secure Boot / 4 GB RAM / CPU) — always via the `LabConfig` registry keys in the autounattend, plus an optional DLL patch for 24H2+ SKUs that block the registry trick. See [`docs/bypass.md`](docs/bypass.md).
+7. **Repacks the ISO** with the rendered autounattend baked in.
+8. **Uploads to gofile.io** (new — primary destination) and optionally to a pool of Google Drive accounts via rclone.
+9. **Uploads ISO as a debug artifact** (7-day retention).
 
 ## Required Secrets (set on the caller/config repo)
 
@@ -84,6 +85,8 @@ gh api repos/win-forge/winforge/dispatches \
 |---|---|---|
 | `RCLONE_CONF` | yes | rclone config (Google Drive account pool) |
 | `ACCOUNTS_YAML` | yes | `config/accounts.yaml` content (account pool metadata) |
+| `GOFILE_TOKEN` | optional | gofile.io JWT (free account). If empty, uploads as guest and content expires in ~10 days. |
+| `BYPASS_DLLS_B64` | optional | base64 tarball of bypass DLLs from `winforge-private/bypass/<product>/`. If empty, only the registry tweak is applied. |
 | `LOCAL_ADMIN_NAME` | if your autounattend uses `{{LOCAL_ADMIN_NAME}}` |
 | `LOCAL_ADMIN_PASS` | if your autounattend uses `{{LOCAL_ADMIN_PASS}}` (PlainText) |
 | `COMPUTER_NAME` | optional | `{{COMPUTER_NAME}}` in autounattend |
@@ -121,6 +124,10 @@ pytest -q
 See `.github/workflows/` for CI entry points. `build.yml` is the reusable
 workflow (consumed by config repos); `check-updates.yml` runs daily to detect
 new UUP-dump builds; `ci.yml` is PR-time linting.
+
+Additional docs:
+- [`docs/gofile.md`](docs/gofile.md) — gofile.io upload (guest vs account mode, API quirks)
+- [`docs/bypass.md`](docs/bypass.md) — Win11 system-requirement bypass (registry + DLL patch)
 
 ## Disk Space Background
 
