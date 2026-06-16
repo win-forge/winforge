@@ -58,6 +58,10 @@ on:
         required: true
       ACCOUNTS_YAML:
         required: true
+      GOFILE_TOKEN:
+        required: false
+      BYPASS_DLLS_B64:
+        required: false
   # Allow direct triggers on the winforge repo itself (legacy / self-build mode).
   # When a user calls `uses: win-forge/winforge/.github/workflows/build.yml@v1`,
   # only workflow_call fires. These other triggers let winforge build itself
@@ -368,6 +372,32 @@ jobs:
             echo "No Intel RST drivers synced — skipping injection"
           fi
 
+      - name: Stage Win11 bypass DLLs (private repo)
+        if: env.BYPASS_DLLS_B64 != ''
+        shell: bash
+        env:
+          BYPASS_DLLS_B64: ${{ secrets.BYPASS_DLLS_B64 }}
+        run: |
+          mkdir -p artifacts/bypass
+          echo -n "$BYPASS_DLLS_B64" | base64 -d | tar -x -C artifacts/bypass
+          ls -la artifacts/bypass/
+          test -f artifacts/bypass/appraiserres.dll \
+            || { echo "bypass tarball missing appraiserres.dll"; exit 1; }
+          test -f artifacts/bypass/appraiser.dll \
+            || { echo "bypass tarball missing appraiser.dll"; exit 1; }
+
+      - name: Apply Win11 system-requirement bypass
+        shell: bash
+        run: |
+          BYPASS_ARGS=(--wim artifacts/install.wim --mount artifacts/mount)
+          if [ -d artifacts/bypass ]; then
+            BYPASS_ARGS+=(--bypass-dir artifacts/bypass)
+            echo "DLL patch + registry tweak"
+          else
+            echo "Registry tweak only (autounattend LabConfig keys)"
+          fi
+          python .winforge/scripts/build/bypass_win11_requirements.py "${BYPASS_ARGS[@]}"
+
       - name: Write rendered autounattend to disk
         if: env.AUTOU_XML != ''
         shell: bash
@@ -388,7 +418,7 @@ jobs:
             artifacts/install.wim \
             "$AUTOU"
 
-      - name: Assign upload account
+      - name: Assign upload account (rclone / Google Drive)
         id: assign
         shell: bash
         env:
@@ -398,7 +428,7 @@ jobs:
           ACCOUNT=$(cd .winforge && python -m scripts.rclone.assign "${PRODUCT}" "6.0" /tmp/accounts.yaml)
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
-      - name: Upload ISO to Google Drive
+      - name: Upload ISO to Google Drive (rclone)
         if: env.RCLONE_CONF != ''
         shell: bash
         env:
@@ -412,6 +442,21 @@ jobs:
             "${{ steps.assign.outputs.account }}" \
             "iso/${PRODUCT}/" \
             ~/.config/rclone/rclone.conf
+
+      - name: Upload ISO to gofile.io
+        shell: bash
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+        run: |
+          if [ -z "${GOFILE_TOKEN}" ]; then
+            echo "::warning::GOFILE_TOKEN secret is empty — uploading as guest (will expire)"
+          fi
+          OUT_NAME="${LABEL:-${PRODUCT}-${EDITION}}"
+          python -m scripts.gofile.upload \
+            "artifacts/${OUT_NAME}.iso" \
+            --product "$PRODUCT" \
+            --edition "$EDITION" \
+            | tee artifacts/gofile-urls.txt
 
       - name: Upload ISO artifact (debug)
         if: always()
