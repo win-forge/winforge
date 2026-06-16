@@ -444,6 +444,7 @@ jobs:
             ~/.config/rclone/rclone.conf
 
       - name: Upload ISO to gofile.io
+        id: gofile
         shell: bash
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
@@ -452,11 +453,48 @@ jobs:
             echo "::warning::GOFILE_TOKEN secret is empty — uploading as guest (will expire)"
           fi
           OUT_NAME="${LABEL:-${PRODUCT}-${EDITION}}"
-          python -m scripts.gofile.upload \
+          URLS=$(python -m scripts.gofile.upload \
             "artifacts/${OUT_NAME}.iso" \
             --product "$PRODUCT" \
-            --edition "$EDITION" \
-            | tee artifacts/gofile-urls.txt
+            --edition "$EDITION")
+          echo "$URLS" | tee artifacts/gofile-urls.txt
+
+          # Parse key=value lines from the script's stdout. Tolerate empty values
+          # and the guest-token warning line (no '='). Skips nothing — extra lines
+          # just get ignored.
+          declare -A GOFILE
+          while IFS='=' read -r k v; do
+            [ -n "$k" ] && GOFILE["$k"]="$v"
+          done <<< "$URLS"
+
+          # Step summary (visible in the Actions run UI on GitHub)
+          {
+            echo "## gofile.io upload"
+            echo ""
+            echo "- **Product / edition:** \`$PRODUCT / $EDITION\`"
+            echo "- **ISO:** \`${OUT_NAME}.iso\`"
+            if [ -n "${GOFILE[folder_url]:-}" ]; then
+              echo "- **Download page:** ${GOFILE[folder_url]}"
+            fi
+            if [ -n "${GOFILE[direct_url]:-}" ]; then
+              echo "- **Direct link:** ${GOFILE[direct_url]}"
+            fi
+            if [ -z "${GOFILE_TOKEN}" ]; then
+              echo "- **Mode:** guest (content expires in ~10 days)"
+            else
+              echo "- **Mode:** account (persistent)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Outputs for caller workflows (Discord webhook, etc — just read these)
+          echo "folder_url=${GOFILE[folder_url]:-}" >> "$GITHUB_OUTPUT"
+          echo "file_id=${GOFILE[file_id]:-}"      >> "$GITHUB_OUTPUT"
+          echo "folder_id=${GOFILE[folder_id]:-}"  >> "$GITHUB_OUTPUT"
+          echo "direct_url=${GOFILE[direct_url]:-}" >> "$GITHUB_OUTPUT"
+          echo "manager_url=${GOFILE[manager_url]:-}" >> "$GITHUB_OUTPUT"
+          if [ -n "${GOFILE[guest_token]:-}" ]; then
+            echo "guest_token=${GOFILE[guest_token]}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload ISO artifact (debug)
         if: always()
