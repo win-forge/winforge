@@ -418,7 +418,7 @@ jobs:
             artifacts/install.wim \
             "$AUTOU"
 
-      - name: Assign upload account (rclone / Google Drive)
+      - name: Assign upload account
         id: assign
         shell: bash
         env:
@@ -428,7 +428,7 @@ jobs:
           ACCOUNT=$(cd .winforge && python -m scripts.rclone.assign "${PRODUCT}" "6.0" /tmp/accounts.yaml)
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
-      - name: Upload ISO to Google Drive (rclone)
+      - name: Upload ISO to Google Drive
         if: env.RCLONE_CONF != ''
         shell: bash
         env:
