@@ -206,7 +206,6 @@ def test_resolve_dispatch_returns_env_shape():
 
 def test_resolve_dispatch_errors_when_no_uuid():
     """If neither profile nor products.yaml has a uup_uuid, raise."""
-    import yaml
     (PROFILES_DIR / "win11-prod.yaml").write_text(
         textwrap.dedent("""
             product: win11-24h2

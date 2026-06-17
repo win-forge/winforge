@@ -16,9 +16,9 @@ secret.
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 import os
 import sys
-from typing import Any
 import requests
 
 from scripts.lib.log import info, error, warn
@@ -49,13 +49,13 @@ def _headers(token: str | None) -> dict[str, str]:
 def get_best_server(token: str | None = None) -> str:
     r = requests.get(f"{API_BASE}/servers", headers=_headers(token), timeout=HTTP_TIMEOUT)
     r.raise_for_status()
-    body = r.json()
+    body = cast("dict[str, Any]", r.json())
     if body.get("status") != "ok":
         raise RuntimeError(f"gofile /servers error: {body}")
     servers = body.get("data", {}).get("servers", [])
     if not servers:
         raise RuntimeError("gofile /servers returned no servers")
-    return servers[0]["name"]
+    return cast("str", servers[0]["name"])
 
 
 def get_account_root(token: str) -> str:
@@ -63,10 +63,10 @@ def get_account_root(token: str) -> str:
     r = requests.get(f"{API_BASE}/accounts/getid",
                      headers=_headers(token), timeout=HTTP_TIMEOUT)
     r.raise_for_status()
-    body = r.json()
+    body = cast("dict[str, Any]", r.json())
     if body.get("status") != "ok":
         raise RuntimeError(f"gofile /accounts/getid error: {body}")
-    return body["data"]["rootFolder"]
+    return cast("str", body["data"]["rootFolder"])
 
 
 def create_folder(name: str, parent_id: str, token: str) -> str:
@@ -80,10 +80,10 @@ def create_folder(name: str, parent_id: str, token: str) -> str:
         headers=_headers(token), timeout=HTTP_TIMEOUT,
     )
     r.raise_for_status()
-    body = r.json()
+    body = cast("dict[str, Any]", r.json())
     if body.get("status") != "ok":
         raise RuntimeError(f"gofile createFolder error: {body}")
-    return body["data"]["id"]
+    return cast("str", body["data"]["id"])
 
 
 def upload_file(server: str, local_path: Path,
@@ -101,10 +101,10 @@ def upload_file(server: str, local_path: Path,
             timeout=UPLOAD_TIMEOUT,
         )
     r.raise_for_status()
-    body = r.json()
+    body = cast("dict[str, Any]", r.json())
     if body.get("status") != "ok":
         raise RuntimeError(f"gofile upload error: {body}")
-    return body["data"]
+    return cast("dict[str, Any]", body["data"])
 
 
 def upload_iso(local_path: Path, *, product: str, edition: str,
