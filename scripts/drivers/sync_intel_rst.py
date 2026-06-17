@@ -1,8 +1,15 @@
 """Sync the latest Intel RST/VMD driver pack into drivers/pack/intel-rst/<version>/.
 
-Source: https://www.intel.com/content/www/us/en/download/849936/...
-Handles both old format (SetupRST_X.Y.Z.W.exe) and new format (SetupRST.exe on a
-page that lists the version).
+Source priority:
+  1. GitHub release asset on win-forge/winforge (fast, reliable, version-pinned)
+  2. Intel's download CDN (fallback if the release doesn't exist for the current
+     version — handles the transition between Intel publishing a new version
+     and us cutting a new release)
+
+Intel's CDN frequently WAF-blocks bot traffic (returns 0-byte files), which
+is why the release-asset path is preferred. Both paths handle both old format
+(SetupRST_X.Y.Z.W.exe) and new format (SetupRST.exe on a page that lists the
+version).
 """
 from __future__ import annotations
 import re
@@ -17,6 +24,14 @@ from scripts.lib.sha import file_sha256
 DOWNLOAD_PAGE = (
     "https://www.intel.com/content/www/us/en/download/849936/"
     "intel-rapid-storage-technology-driver-installation-software-with-intel-optane-memory.html"
+)
+# GitHub release asset: pinned SetupRST.exe for the version this script
+# expects. The version literal is appended to the URL so a single script
+# works for any pinned Intel version. Update VENDORED_VERSION when bumping.
+VENDORED_VERSION = "20.2.6.1025"
+VENDORED_RELEASE_URL = (
+    f"https://github.com/win-forge/winforge/releases/download/"
+    f"intel-rst-v{VENDORED_VERSION}/SetupRST.exe"
 )
 PACK_ROOT = Path(__file__).parent / "pack" / "intel-rst"
 
@@ -39,6 +54,32 @@ def find_driver_root(extract_dir: Path) -> Path:
     if not candidates:
         raise FileNotFoundError("iaStorAC.inf not found in extracted tree")
     return candidates[0].parent.parent.parent  # iaStorAC.inf/x64/iaStorAC -> drivers
+
+
+def _try_vendored_release() -> tuple[str, str] | None:
+    """Download from the win-forge/winforge GitHub release.
+
+    Returns (version, local_path) on success, or None if the release is missing
+    / unreachable. The version is hard-coded (VENDORED_VERSION) since the
+    release tag encodes it.
+    """
+    try:
+        with requests.get(VENDORED_RELEASE_URL, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            tmp = Path("/tmp") / f"SetupRST_v{VENDORED_VERSION}.exe"
+            with tmp.open("wb") as f:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    f.write(chunk)
+            # Sanity: reject 0-byte (Intel WAF returns these; release shouldn't,
+            # but defensive)
+            if tmp.stat().st_size < 1024:
+                tmp.unlink(missing_ok=True)
+                return None
+            return VENDORED_VERSION, str(tmp)
+    except Exception as e:
+        error("drivers.vendored_download_failed", error=str(e),
+              url=VENDORED_RELEASE_URL)
+        return None
 
 
 def fetch_latest_metadata() -> tuple[str, str]:
@@ -72,42 +113,57 @@ def fetch_latest_metadata() -> tuple[str, str]:
 
 
 def sync(target_root: Path = PACK_ROOT) -> Path | None:
-    """Sync the latest Intel RST/VMD driver pack.
+    """Sync the Intel RST/VMD driver pack.
 
-    Returns the driver root Path on success, or None if download is blocked
-    (e.g. Intel's WAF challenges CI bots). Callers should treat None as
-    "skip driver injection, continue build".
+    Order of operations:
+      1. Download the pinned version from the win-forge/winforge GitHub release
+      2. Extract drivers from the installer
+      3. Move drivers to the pack directory
+
+    Falls back to Intel's CDN if the release is missing/unreachable (e.g. when
+    Intel publishes a new version and we haven't cut a new release yet).
+
+    Returns the driver root Path on success, or None if every source failed.
+    Callers should treat None as "skip driver injection, continue build".
     """
-    try:
-        version, url = fetch_latest_metadata()
-    except Exception as e:
-        error("drivers.metadata_failed", error=str(e))
-        return None
-    out_dir = target_root / version
+    # Try the vendored release first
+    out_dir = target_root / VENDORED_VERSION
     if (out_dir / ".synced").exists():
-        info("drivers.already_synced", version=version, path=str(out_dir))
+        info("drivers.already_synced", version=VENDORED_VERSION, path=str(out_dir))
         return out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     installer = out_dir / "SetupRST.exe"
-    info("drivers.downloading", version=version, url=url)
-    try:
-        with requests.get(url, stream=True, timeout=120) as r:
-            r.raise_for_status()
-            with installer.open("wb") as f:
-                for chunk in r.iter_content(chunk_size=1 << 20):
-                    f.write(chunk)
-    except Exception as e:
-        error("drivers.download_failed", error=str(e), url=url)
-        # Clean up the 0-byte / partial file so we retry next run
-        if installer.exists():
+
+    vendored = _try_vendored_release()
+    if vendored is not None:
+        version, local_path = vendored
+        shutil.move(local_path, installer)
+        info("drivers.vendored_ok", version=version, dst=str(installer))
+    else:
+        # Fall back to Intel CDN
+        try:
+            version, url = fetch_latest_metadata()
+        except Exception as e:
+            error("drivers.metadata_failed", error=str(e))
+            return None
+        info("drivers.downloading", version=version, url=url)
+        try:
+            with requests.get(url, stream=True, timeout=120) as r:
+                r.raise_for_status()
+                with installer.open("wb") as f:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        f.write(chunk)
+        except Exception as e:
+            error("drivers.download_failed", error=str(e), url=url)
+            if installer.exists():
+                installer.unlink()
+            return None
+        if installer.stat().st_size < 1024:
+            error("drivers.download_failed", reason="empty_or_blocked", url=url,
+                  size=installer.stat().st_size)
             installer.unlink()
-        return None
-    # Sanity check: 0-byte file means Intel returned an HTML WAF challenge
-    if installer.stat().st_size < 1024:
-        error("drivers.download_failed", reason="empty_or_blocked", url=url,
-              size=installer.stat().st_size)
-        installer.unlink()
-        return None
+            return None
+
     extract_dir = out_dir / "extracted"
     extract_dir.mkdir(exist_ok=True)
     try:
@@ -125,7 +181,7 @@ def sync(target_root: Path = PACK_ROOT) -> Path | None:
         shutil.rmtree(final)
     shutil.move(str(driver_root), str(final))
     (out_dir / ".synced").write_text(file_sha256(installer) + "\n")
-    info("drivers.synced", version=version, path=str(final))
+    info("drivers.synced", version=VENDORED_VERSION, path=str(final))
     return final
 
 
