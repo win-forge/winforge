@@ -242,7 +242,7 @@ jobs:
       - name: Install system deps for UUP conversion
         run: |
           sudo apt-get update
-          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage xorriso isolinux uuid-runtime
+          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage xorriso isolinux uuid-runtime rclone
           # xorriso needs isohdpfx.bin from isolinux for hybrid MBR
           ls -la /usr/lib/ISOLINUX/isohdpfx.bin || sudo apt-get install -y syslinux-common
 
