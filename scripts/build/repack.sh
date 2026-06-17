@@ -64,7 +64,12 @@ if [ "$ISO_BUILDER" = "oscdimg" ]; then
             "$WORK" "$ISO_OUT"
     fi
 elif [ "$ISO_BUILDER" = "xorriso" ]; then
-    # xorriso: UEFI-only via -isohybrid-mbr or via El Torito + EFI
+    # xorriso: UEFI via -e (EFI system partition image), BIOS via -b.
+    # -isohybrid-mbr gives a hybrid MBR for BIOS+UEFI on USB sticks;
+    # -isohybrid-gpt-basdat adds a protective GPT for UEFI systems.
+    # Note: --grub2-boot-info was removed — it's for GRUB-based images and
+    # was producing an El Torito catalog with EFI entry_count=0 (the EFI
+    # entry was silently dropped). Verified bootable via catalog parse.
     xorriso -as mkisofs \
         -o "$ISO_OUT" \
         -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
@@ -72,14 +77,13 @@ elif [ "$ISO_BUILDER" = "xorriso" ]; then
         -no-emul-boot \
         -boot-load-size 8 \
         -boot-info-table \
-        --grub2-boot-info \
         -eltorito-alt-boot \
         -e efi/microsoft/boot/efisys.bin \
         -no-emul-boot \
         -isohybrid-gpt-basdat \
         -V "CCCOMA_X64FRE_EN-US_DV9" \
         "$WORK" 2>&1 | tail -3 || {
-        # Fallback: simpler invocation
+        # Fallback: simpler invocation if isohdpfx.bin isn't available
         xorriso -as mkisofs \
             -o "$ISO_OUT" \
             -e efi/microsoft/boot/efisys.bin \
