@@ -84,7 +84,11 @@ def test_mount_wim_wimlib_cmd(tmp_path: Path):
         bypass.mount_wim(Path("wim"), tmp_path / "m", 1, "wimlib-imagex")
     cmd = r.call_args.args[0]
     assert cmd[:3] == ["wimlib-imagex", "mount", "wim"]
-    assert "--readwrite" in cmd
+    # wimlib-imagex mount: WIMFILE [IMAGE] DIRECTORY  — no --readwrite flag,
+    # default is read-write
+    assert "--readwrite" not in cmd
+    assert cmd[3] == "1"  # image index
+    assert cmd[4].endswith("m")  # mount dir
 
 
 def test_unmount_wim_commits_dism():
@@ -99,7 +103,15 @@ def test_unmount_wim_discards_wimlib():
     with patch("scripts.build.bypass_win11_requirements._run") as r:
         bypass.unmount_wim(Path("/m"), "wimlib-imagex", commit=False)
     cmd = r.call_args.args[0]
-    assert "--discard" in cmd
+    assert cmd == ["wimlib-imagex", "unmount", "/m"]
+    assert "--commit" not in cmd
+
+
+def test_unmount_wim_commits_wimlib():
+    with patch("scripts.build.bypass_win11_requirements._run") as r:
+        bypass.unmount_wim(Path("/m"), "wimlib-imagex", commit=True)
+    cmd = r.call_args.args[0]
+    assert "--commit" in cmd
 
 
 def test_patch_dlls_copies_present_files(tmp_path: Path):

@@ -81,24 +81,24 @@ def get_wim_indexes(wim: Path, tool: str) -> list[int]:
                 except ValueError:
                     pass
     return idxs
-
-
 def mount_wim(wim: Path, mount: Path, index: int, tool: str) -> None:
     mount.mkdir(parents=True, exist_ok=True)
     if tool == "dism":
         _run(["dism", "/Mount-Wim", f"/WimFile:{wim}", f"/Index:{index}",
               f"/MountDir:{mount}", "/ReadOnly:NO"])
     else:
-        _run(["wimlib-imagex", "mount", str(wim), str(index), str(mount), "--readwrite"])
+        # wimlib-imagex mount defaults to read-write; no extra flag needed
+        _run(["wimlib-imagex", "mount", str(wim), str(index), str(mount)])
 
 
 def unmount_wim(mount: Path, tool: str, commit: bool = True) -> None:
     if tool == "dism":
-        action = "/Commit" if commit else "/Discard"
-        _run(["dism", "/Unmount-Wim", f"/MountDir:{mount}", action])
+        dism_flag = "/Commit" if commit else "/Discard"
+        _run(["dism", "/Unmount-Wim", f"/MountDir:{mount}", dism_flag])
     else:
-        action = "--commit" if commit else "--discard"
-        _run(["wimlib-imagex", "unmount", str(mount), action])
+        # wimlib-imagex unmount: --commit saves changes, default discards
+        wim_flags = ["--commit"] if commit else []
+        _run(["wimlib-imagex", "unmount", str(mount), *wim_flags])
 
 
 def patch_dlls(mount: Path, bypass_dir: Path) -> list[str]:
