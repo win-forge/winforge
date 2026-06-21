@@ -423,6 +423,13 @@ jobs:
       # class (and any future flag that silently drops the EFI section).
       # 'file win11.iso' only reports the MBR/BIOS indicator and silently
       # passes when the EFI entry is empty; only a catalog parse catches it.
+      #
+      # IMPORTANT: only the repacked output ISO (artifacts/<OUT_NAME>.iso)
+      # is verified — not artifacts/iso-in.iso. The source ISO from UUP-dump
+      # conversion has an EFI section header with platform=0x00 (not 0xEF),
+      # which is a known intermediate artifact of the UUP converter. The
+      # repack step fixes this; only the post-repack output is expected to
+      # be UEFI-bootable.
       - name: Verify ISO is UEFI bootable
         shell: bash
         run: |
@@ -432,16 +439,14 @@ jobs:
             echo "::error::Expected ISO not found at $ISO (repack step didn't produce it?)"
             exit 1
           fi
-          # Verify every ISO in artifacts/, not just the named one, so this
-          # step stays correct if a future build produces multiple files.
+          echo "--- $ISO ---"
           # --json output goes to the log for human-readable debugging.
-          shopt -s nullglob
-          rc=0
-          for f in artifacts/*.iso; do
-            echo "--- $f ---"
-            python -m scripts.build.verify_iso_bootable "$f" --json \
-              | tee -a artifacts/boot-check.json || rc=$?
-          done
+          # PIPESTATUS[0] captures python's exit code (the |tee would
+          # otherwise mask it because GitHub's default bash doesn't set
+          # pipefail).
+          python -m scripts.build.verify_iso_bootable "$ISO" --json \
+            | tee artifacts/boot-check.json
+          rc=${PIPESTATUS[0]}
           if [ "$rc" -ne 0 ]; then
             echo "::error::ISO boot verification failed (rc=$rc). The ISO is not UEFI-bootable."
             echo "::error::See artifacts/boot-check.json and the warnings above."
