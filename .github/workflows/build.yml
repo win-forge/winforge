@@ -460,7 +460,7 @@ jobs:
       # doesn't fail downstream on "No account can host <product>".
       - name: Assign upload account
         id: assign
-        if: ${{ secrets.ACCOUNTS_YAML != '' }}
+        if: secrets.ACCOUNTS_YAML != ''
         shell: bash
         env:
           ACCOUNTS_YAML: ${{ secrets.ACCOUNTS_YAML }}
@@ -470,7 +470,7 @@ jobs:
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
       - name: Upload ISO to Google Drive
-        if: ${{ secrets.ACCOUNTS_YAML != '' && secrets.RCLONE_CONF != '' }}
+        if: secrets.ACCOUNTS_YAML != '' && secrets.RCLONE_CONF != ''
         shell: bash
         env:
           RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
