@@ -99,6 +99,12 @@ jobs:
       CONFIG_ROOT: ${{ inputs.config_root }}
       # Winforge ref. v1 = stable major-version tag (recommended).
       WINFORGE_REF: ${{ inputs.winforge_ref }}
+      # Hoist secrets to job-level env so step `if:` conditions can gate on
+      # their presence. Direct `secrets.X` access in step `if:` is rejected
+      # by the workflow parser in some trigger contexts (workflow_dispatch
+      # on the same repo). env.X is the supported pattern.
+      HAS_ACCOUNTS_YAML: ${{ secrets.ACCOUNTS_YAML != '' }}
+      HAS_RCLONE_CONF: ${{ secrets.RCLONE_CONF != '' }}
     steps:
       # Free disk space BEFORE checkout (this action remounts $GITHUB_WORKSPACE).
       # UUP→WIM conversion can hit 8GB+ intermediate; runner ships 25-29GB free
@@ -460,7 +466,7 @@ jobs:
       # doesn't fail downstream on "No account can host <product>".
       - name: Assign upload account
         id: assign
-        if: secrets.ACCOUNTS_YAML != ''
+        if: env.HAS_ACCOUNTS_YAML == 'true'
         shell: bash
         env:
           ACCOUNTS_YAML: ${{ secrets.ACCOUNTS_YAML }}
@@ -470,7 +476,7 @@ jobs:
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
       - name: Upload ISO to Google Drive
-        if: secrets.ACCOUNTS_YAML != '' && secrets.RCLONE_CONF != ''
+        if: env.HAS_ACCOUNTS_YAML == 'true' && env.HAS_RCLONE_CONF == 'true'
         shell: bash
         env:
           RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
