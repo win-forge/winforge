@@ -1,0 +1,5 @@
+# Placeholder so the empty product directory is tracked by git.
+# Replace by dropping the version-matched DLLs into this directory:
+#   bypass/<product>/appraiserres.dll
+#   bypass/<product>/appraiser.dll
+# See ../README.md for sources and version-locking notes.

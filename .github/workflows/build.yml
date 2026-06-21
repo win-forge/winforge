@@ -60,8 +60,6 @@ on:
         required: false
       GOFILE_TOKEN:
         required: false
-      BYPASS_DLLS_B64:
-        required: false
   # Allow direct triggers on the winforge repo itself (legacy / self-build mode).
   # When a user calls `uses: win-forge/winforge/.github/workflows/build.yml@v1`,
   # only workflow_call fires. These other triggers let winforge build itself
@@ -378,19 +376,30 @@ jobs:
             echo "No Intel RST drivers synced — skipping injection"
           fi
 
-      - name: Stage Win11 bypass DLLs (private repo)
-        if: env.BYPASS_DLLS_B64 != ''
+      # Vendored bypass DLLs: copy from bypass/${PRODUCT}/ to artifacts/bypass/
+      # so the apply step picks them up. If the product dir is empty or
+      # missing, fall through to registry-only (same graceful-degradation
+      # behavior as the previous BYPASS_DLLS_B64 secret path). See
+      # bypass/README.md for how to populate.
+      - name: Stage Win11 bypass DLLs (vendored)
         shell: bash
-        env:
-          BYPASS_DLLS_B64: ${{ secrets.BYPASS_DLLS_B64 }}
         run: |
-          mkdir -p artifacts/bypass
-          echo -n "$BYPASS_DLLS_B64" | base64 -d | tar -x -C artifacts/bypass
-          ls -la artifacts/bypass/
-          test -f artifacts/bypass/appraiserres.dll \
-            || { echo "bypass tarball missing appraiserres.dll"; exit 1; }
-          test -f artifacts/bypass/appraiser.dll \
-            || { echo "bypass tarball missing appraiser.dll"; exit 1; }
+          BYPASS_SRC=".winforge/bypass/${PRODUCT}"
+          if [ -d "$BYPASS_SRC" ]; then
+            mkdir -p artifacts/bypass
+            cp "$BYPASS_SRC"/appraiserres.dll "$BYPASS_SRC"/appraiser.dll artifacts/bypass/
+            # Fail loudly if the source dir is missing DLLs (e.g. partial
+            # checkout) rather than letting the bypass script crash later
+            # with a less obvious error.
+            test -f artifacts/bypass/appraiserres.dll \
+              || { echo "::error::$BYPASS_SRC missing appraiserres.dll"; exit 1; }
+            test -f artifacts/bypass/appraiser.dll \
+              || { echo "::error::$BYPASS_SRC missing appraiser.dll"; exit 1; }
+            ls -la artifacts/bypass/
+            echo "DLL patch enabled (vendored from $BYPASS_SRC)"
+          else
+            echo "No vendored bypass DLLs at $BYPASS_SRC — registry tweak only"
+          fi
 
       - name: Apply Win11 system-requirement bypass
         shell: bash
