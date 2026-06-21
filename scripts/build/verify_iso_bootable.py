@@ -122,7 +122,13 @@ def verify_iso_bootable(iso_path: str | Path) -> BootCheck:
     if section[0] == 0x91:
         # Section header present. Platform ID at byte 65 (section[1]).
         if section[1] == 0xEF:
-            entry_count = int.from_bytes(section[28:30], "little")
+            # SectionEntries is a UINT16 LE at offset 2 of the section header
+            # entry (bytes 66..67 of the catalog). NOT offset 28-29 — those
+            # are the last two bytes of the 28-byte Id[28] string, which is
+            # usually empty (zeros) and yields a constant false-positive on
+            # every well-formed ISO. Source: edk2 MdePkg/Include/IndustryStandard/
+            # ElTorito.h — SectionEntries: UINT16 at offset 2.
+            entry_count = int.from_bytes(section[2:4], "little")
             uefi_ok = entry_count >= 1
             if not uefi_ok:
                 warnings.append(
@@ -147,6 +153,35 @@ def verify_iso_bootable(iso_path: str | Path) -> BootCheck:
         )
 
     return BootCheck(bios=bios_ok, uefi=uefi_ok, warnings=warnings, errors=errors)
+
+
+def debug_dump_catalog(iso_path: str | Path) -> dict:
+    """Dump raw bytes of every catalog entry for debugging.
+
+    Returns a dict with hex/string views of the validation entry,
+    default entry, and any section headers found. Used to figure out
+    which bytes mean what when the parser disagrees with reality.
+    """
+    path = Path(iso_path)
+    br = _read_sector(path, 17)
+    catalog_lba = int.from_bytes(br[0x47:0x4B], "little")
+    catalog = _read_sector(path, catalog_lba)
+    return {
+        "pvd_sector": 16,
+        "br_sector": 17,
+        "catalog_lba": catalog_lba,
+        "validation_entry": catalog[0:32].hex(),
+        "default_entry": catalog[32:64].hex(),
+        "section_at_64": catalog[64:96].hex(),
+        "section_at_96": catalog[96:128].hex() if len(catalog) >= 128 else None,
+        "section_byte0": f"0x{catalog[64]:02x}",
+        "section_byte1": f"0x{catalog[64 + 1]:02x}",
+        # Per the spec, SectionEntries is bytes 2-3 of the section header
+        # entry (= bytes 66-67 of the catalog). Bytes 92-93 are part of the
+        # 28-byte Id[28] string and not the entry count.
+        "section_entries_int": int.from_bytes(catalog[64 + 2:64 + 4], "little"),
+        "full_catalog_first_512": catalog[:512].hex(),
+    }
 
 
 def _format_text(check: BootCheck, iso_path: Path) -> str:

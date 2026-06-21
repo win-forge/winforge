@@ -63,11 +63,19 @@ def _default_entry(bootable: bool = True, rba: int = 100) -> bytes:
 
 
 def _efi_section_header(entry_count: int) -> bytes:
-    """Bytes 64..95 of the boot catalog: EFI section header (or absent)."""
+    """Bytes 64..95 of the boot catalog: EFI section header (or absent).
+
+    Per the El Torito spec (edk2 MdePkg/Include/IndustryStandard/ElTorito.h,
+    Section header entry):
+      - Byte 0: Indicator (0x91 for final header)
+      - Byte 1: PlatformId (0xEF for EFI)
+      - Bytes 2-3: SectionEntries (UINT16 LE) — count of section entries
+      - Bytes 4-31: Id[28] string (often empty)
+    """
     e = bytearray(32)
-    e[0] = 0x91  # section header ID
+    e[0] = 0x91  # final section header ID
     e[1] = 0xEF  # platform ID for EFI
-    e[28:30] = struct.pack("<H", entry_count)
+    e[2:4] = struct.pack("<H", entry_count)
     return bytes(e)
 
 
@@ -221,3 +229,51 @@ def test_ok_property_combines_correctly(tmp_path: Path):
 
     iso_bios_only = _build_iso(tmp_path, include_efi_section=False)
     assert verify_iso_bootable(iso_bios_only).ok is False
+
+
+def test_entry_count_offset_matches_spec(tmp_path: Path):
+    """Spec regression: SectionEntries (UINT16 LE) is at offset 2-3 of the
+    section header entry, NOT offset 28-29. The 28-29 region is the LAST
+    2 bytes of the 28-byte Id[28] string, which is usually empty zeros
+    and would yield a constant false-positive entry_count=0.
+
+    This test pins both offsets to lock the spec interpretation:
+    - Encoding entry_count=1 at the WRONG offset (28-29) and reading at
+      the RIGHT offset (2-3) returns entry_count=0 → fails. Confirms the
+      bug shape that fooled the original skill recipe.
+    - Encoding at the RIGHT offset (2-3) and reading at the WRONG offset
+      (28-29) returns the Id bytes (= 0 for empty Id) → constant
+      false-positive.
+    """
+    import struct as _s
+
+    def _fixture_with_count_at(offset: int) -> Path:
+        iso = tmp_path / f"iso_{offset}.iso"
+        cat = (
+            _validation_entry()
+            + _default_entry()
+            + (lambda e: (e.__setitem__(slice(offset, offset + 2), _s.pack("<H", 1)) or e))(bytearray(32))
+        )
+        # Patch bytes 0/1 of the section entry
+        cat_arr = bytearray(cat)
+        cat_arr[64] = 0x91
+        cat_arr[65] = 0xEF
+        cat = bytes(cat_arr).ljust(SECTOR, b"\x00")
+        with iso.open("wb") as f:
+            f.write(b"\x00" * (16 * SECTOR))
+            f.write(_pvd())
+            f.write(_br(18))
+            f.write(cat)
+        return iso
+
+    # Encoding at the spec-correct offset (2) → parser should report UEFI=True
+    iso_correct = _fixture_with_count_at(2)
+    assert verify_iso_bootable(iso_correct).uefi is True
+
+    # Encoding at the wrong offset (28) → parser should report UEFI=False
+    # because section[2:4] reads zero (this is the false-positive shape).
+    iso_wrong = _fixture_with_count_at(28)
+    assert verify_iso_bootable(iso_wrong).uefi is False, (
+        "Parser should report UEFI=False when entry count is at wrong offset "
+        "(this is the bug shape: reading the Id[28] tail instead of SectionEntries)"
+    )
