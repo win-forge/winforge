@@ -57,7 +57,7 @@ on:
       RCLONE_CONF:
         required: true
       ACCOUNTS_YAML:
-        required: true
+        required: false
       GOFILE_TOKEN:
         required: false
       BYPASS_DLLS_B64:
@@ -453,8 +453,14 @@ jobs:
           fi
           exit "$rc"
 
+      # gofile.io is the default upload target — it always runs (guest mode
+      # if GOFILE_TOKEN is empty, ~10-day expiry). The Google Drive / rclone
+      # path is gated on ACCOUNTS_YAML being configured: skip the assign +
+      # upload steps entirely when no accounts are available so the build
+      # doesn't fail downstream on "No account can host <product>".
       - name: Assign upload account
         id: assign
+        if: ${{ secrets.ACCOUNTS_YAML != '' }}
         shell: bash
         env:
           ACCOUNTS_YAML: ${{ secrets.ACCOUNTS_YAML }}
@@ -464,7 +470,7 @@ jobs:
           echo "account=$ACCOUNT" >> $GITHUB_OUTPUT
 
       - name: Upload ISO to Google Drive
-        if: env.RCLONE_CONF != ''
+        if: ${{ secrets.ACCOUNTS_YAML != '' && secrets.RCLONE_CONF != '' }}
         shell: bash
         env:
           RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
@@ -504,7 +510,7 @@ jobs:
 
           # Step summary (visible in the Actions run UI on GitHub)
           {
-            echo "## gofile.io upload"
+            echo "## gofile.io upload (default upload target)"
             echo ""
             echo "- **Product / edition:** \`$PRODUCT / $EDITION\`"
             echo "- **ISO:** \`${OUT_NAME}.iso\`"
