@@ -418,6 +418,36 @@ jobs:
             artifacts/install.wim \
             "$AUTOU"
 
+      # Regression guard: parse the El Torito boot catalog and fail the build
+      # if the ISO isn't UEFI-bootable. Catches the --grub2-boot-info bug
+      # class (and any future flag that silently drops the EFI section).
+      # 'file win11.iso' only reports the MBR/BIOS indicator and silently
+      # passes when the EFI entry is empty; only a catalog parse catches it.
+      - name: Verify ISO is UEFI bootable
+        shell: bash
+        run: |
+          OUT_NAME="${LABEL:-${PRODUCT}-${EDITION}}"
+          ISO="artifacts/${OUT_NAME}.iso"
+          if [ ! -f "$ISO" ]; then
+            echo "::error::Expected ISO not found at $ISO (repack step didn't produce it?)"
+            exit 1
+          fi
+          # Verify every ISO in artifacts/, not just the named one, so this
+          # step stays correct if a future build produces multiple files.
+          # --json output goes to the log for human-readable debugging.
+          shopt -s nullglob
+          rc=0
+          for f in artifacts/*.iso; do
+            echo "--- $f ---"
+            python -m scripts.build.verify_iso_bootable "$f" --json \
+              | tee -a artifacts/boot-check.json || rc=$?
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::ISO boot verification failed (rc=$rc). The ISO is not UEFI-bootable."
+            echo "::error::See artifacts/boot-check.json and the warnings above."
+          fi
+          exit "$rc"
+
       - name: Assign upload account
         id: assign
         shell: bash
