@@ -11,9 +11,10 @@ Two layers (orthogonal — both can be on, either, or neither):
      Replaces `Windows/System32/appraiserres.dll` and `appraiser.dll`
      with community-bypass versions. Bypasses the compatibility check
      for Win11 builds where Microsoft has blocked the registry trick
-     (e.g. some 24H2/25H2 SKUs). Source DLLs come from the private repo
-     (`winforge-private/bypass/<product>/`) and are passed in as a
-     base64 tarball secret (`BYPASS_DLLS_B64`).
+     (e.g. some 24H2 Enterprise / 25H2 LTSC SKUs). Source DLLs are
+     vendored at `bypass/<product>/` in the repo — see
+     `scripts/build/bypass_policy.py` for which editions need this,
+     and `bypass/README.md` for how to populate.
 
 This script does (2). Works on the Windows runner via `dism`, on Linux
 via `wimlib-imagex`. Auto-detected by platform.
@@ -131,7 +132,7 @@ def apply(cfg: BypassConfig) -> dict[str, Any]:
     if not do_dll_patch:
         warn("bypass.no_dlls",
              hint="registry tweak still applied via autounattend. "
-                  "Provide BYPASS_DLLS_B64 secret to also patch appraiser DLLs.")
+                  "Populate bypass/<product>/ with appraiser DLLs to also patch.")
 
     indexes = get_wim_indexes(cfg.wim_path, tool)
     if not indexes:

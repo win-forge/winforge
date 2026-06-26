@@ -16,18 +16,23 @@ editions:
       label: Windows 11 Pro for Workstations
     - id: enterprise
       label: Windows 11 Enterprise
+      needs_dll_bypass: true
     - id: enterprisen
       label: Windows 11 Enterprise N
+      needs_dll_bypass: true
   win11-25h2:
     - id: professional
       label: Windows 11 Pro
     - id: enterprise
       label: Windows 11 Enterprise
+      needs_dll_bypass: true
     - id: iotenterprise
       label: Windows 11 IoT Enterprise LTSC
+      needs_dll_bypass: true
   win11-ltsc:
     - id: iotenterprise
       label: Windows 11 IoT Enterprise LTSC
+      needs_dll_bypass: true
     - id: professional
       label: Windows 11 Pro
   win10-22h2:

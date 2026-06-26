@@ -55,7 +55,7 @@ on:
         default: "v1"
     secrets:
       RCLONE_CONF:
-        required: true
+        required: false
       ACCOUNTS_YAML:
         required: false
       GOFILE_TOKEN:
@@ -376,30 +376,38 @@ jobs:
             echo "No Intel RST drivers synced — skipping injection"
           fi
 
-      # Vendored bypass DLLs: copy from bypass/${PRODUCT}/ to artifacts/bypass/
-      # so the apply step picks them up. If the product dir is empty or
-      # missing, fall through to registry-only (same graceful-degradation
-      # behavior as the previous BYPASS_DLLS_B64 secret path). See
-      # bypass/README.md for how to populate.
+      # Win11 bypass policy: check whether this product+edition needs the
+      # DLL patch (some 24H2 Enterprise / 25H2 LTSC SKUs block the registry
+      # trick). The policy reads the `needs_dll_bypass` flag from
+      # editions.yaml. If needed + DLLs present → stage + patch. If needed
+      # + DLLs missing → fail the build with a clear error. If not needed →
+      # skip the DLL steps entirely (saves WIM mount/unmount time).
+      - name: Check Win11 bypass policy
+        id: bypass_policy
+        shell: bash
+        run: |
+          RESULT=$(python .winforge/scripts/build/bypass_policy.py \
+            --product "$PRODUCT" \
+            --edition "$EDITION" \
+            --bypass-root .winforge/bypass)
+          echo "$RESULT"
+          # Parse action=skip|patch|fail
+          ACTION=$(echo "$RESULT" | grep '^action=' | cut -d= -f2)
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+
       - name: Stage Win11 bypass DLLs (vendored)
+        if: steps.bypass_policy.outputs.action == 'patch'
         shell: bash
         run: |
           BYPASS_SRC=".winforge/bypass/${PRODUCT}"
-          if [ -d "$BYPASS_SRC" ]; then
-            mkdir -p artifacts/bypass
-            cp "$BYPASS_SRC"/appraiserres.dll "$BYPASS_SRC"/appraiser.dll artifacts/bypass/
-            # Fail loudly if the source dir is missing DLLs (e.g. partial
-            # checkout) rather than letting the bypass script crash later
-            # with a less obvious error.
-            test -f artifacts/bypass/appraiserres.dll \
-              || { echo "::error::$BYPASS_SRC missing appraiserres.dll"; exit 1; }
-            test -f artifacts/bypass/appraiser.dll \
-              || { echo "::error::$BYPASS_SRC missing appraiser.dll"; exit 1; }
-            ls -la artifacts/bypass/
-            echo "DLL patch enabled (vendored from $BYPASS_SRC)"
-          else
-            echo "No vendored bypass DLLs at $BYPASS_SRC — registry tweak only"
-          fi
+          mkdir -p artifacts/bypass
+          cp "$BYPASS_SRC"/appraiserres.dll "$BYPASS_SRC"/appraiser.dll artifacts/bypass/
+          test -f artifacts/bypass/appraiserres.dll \
+            || { echo "::error::$BYPASS_SRC missing appraiserres.dll"; exit 1; }
+          test -f artifacts/bypass/appraiser.dll \
+            || { echo "::error::$BYPASS_SRC missing appraiser.dll"; exit 1; }
+          ls -la artifacts/bypass/
+          echo "DLL patch enabled (vendored from $BYPASS_SRC)"
 
       - name: Apply Win11 system-requirement bypass
         shell: bash

@@ -36,7 +36,13 @@ if [ ! -f "$UEFI_BOOT" ]; then
     exit 1
 fi
 
-# Pick the ISO builder: oscdimg (Windows), xorriso (Linux, preferred), genisoimage (fallback)
+# Pick the ISO builder. Priority order matches the Windows ADK preference
+# (oscdimg), then Linux's preferred xorriso. genisoimage is kept as a last
+# resort for environments where neither is available — but it produces
+# BIOS-only ISOs that fail the UEFI verify step, so the resulting build
+# will be flagged (and an actual install would fail to boot on modern UEFI
+# hardware). The right answer in a genisoimage-only environment is to
+# install xorriso (`apt install xorriso`), not to rely on this fallback.
 ISO_BUILDER=""
 if command -v oscdimg >/dev/null 2>&1; then
     ISO_BUILDER="oscdimg"
@@ -92,7 +98,15 @@ elif [ "$ISO_BUILDER" = "xorriso" ]; then
             "$WORK" 2>&1 | tail -3
     }
 elif [ "$ISO_BUILDER" = "genisoimage" ]; then
-    # genisoimage: simpler, UEFI-only is most reliable
+    # genisoimage fallback. DOES NOT produce UEFI-bootable ISOs — it has
+    # no equivalent of xorriso's -eltorito-alt-boot / -e for an EFI
+    # system partition image, and no documented way to emit a 0x91
+    # section header with platform=0xEF. The ISO produced here boots
+    # on neither legacy BIOS (efisys.bin isn't a BIOS bootloader) nor
+    # UEFI (no EFI section in the catalog). The build's verify step
+    # will fail it. We emit a clear warning so the operator sees why.
+    echo "[repack] WARNING: genisoimage produces BIOS-only ISOs that won't boot on UEFI."
+    echo "[repack] WARNING: Install xorriso for UEFI support: apt install xorriso"
     genisoimage -o "$ISO_OUT" \
         -V "CCCOMA_X64FRE_EN-US_DV9" \
         -b efi/microsoft/boot/efisys.bin \
