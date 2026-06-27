@@ -48,10 +48,13 @@ def test_genisoimage_produces_bootable_iso(tmp_path: Path):
     assert iso_out.exists()
     assert iso_out.stat().st_size > 2048  # at least a sector
 
-    # Verify ISO signature (ISO 9660 starts with \x01CD001)
+    # Verify ISO signature — PVD is at sector 16 (offset 32768), not byte 0.
+    # Sector 0 is the System Area (typically zeros). The PVD starts with
+    # type byte 0x01 followed by "CD001".
     with open(iso_out, "rb") as f:
+        f.seek(16 * 2048)
         sig = f.read(7)
-    assert sig.startswith(b"\x01CD001"), f"Not a valid ISO: {sig!r}"
+    assert sig.startswith(b"\x01CD001"), f"Not a valid ISO: PVD at sector 16 = {sig!r}"
 
 
 def test_assign_account_selects_smallest_pool(tmp_path: Path):
