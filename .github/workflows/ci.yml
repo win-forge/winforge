@@ -36,7 +36,8 @@ jobs:
       - name: Install ISO tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y xorriso genisoimage p7zip-full
+          sudo apt-get install -y xorriso genisoimage p7zip-full isolinux syslinux-common
+          ls -la /usr/lib/ISOLINUX/isohdpfx.bin
       - name: Run bootability tests
         run: pytest tests/test_iso_bootability.py tests/test_repack_uefi.py tests/test_verify_iso_bootable.py -v --tb=short
       - name: Run remaining tests (no skips expected)

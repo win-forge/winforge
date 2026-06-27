@@ -73,7 +73,11 @@ def _make_source_fixture(root: Path) -> Path:
 
 
 def _make_source_iso(src_dir: Path, out_iso: Path) -> Path:
-    """Build a source ISO using xorriso (preferred) or genisoimage."""
+    """Build a source ISO using xorriso (preferred) or genisoimage.
+
+    -R -J (Rock Ridge + Joliet) preserve lowercase directory names so
+    repack.sh's ``cp "$WIM_IN" "$WORK/sources/install.wim"`` works.
+    """
     builder = None
     for b in ("xorriso", "genisoimage"):
         if shutil.which(b):
@@ -82,9 +86,10 @@ def _make_source_iso(src_dir: Path, out_iso: Path) -> Path:
     if not builder:
         pytest.skip("no ISO builder available (need xorriso or genisoimage)")
 
-    cmd = [builder, "-o", str(out_iso), "-V", "SRC_FX"]
+    rr_joliet = ["-R", "-J"]
+    cmd = [builder, "-o", str(out_iso), "-V", "SRC_FX", *rr_joliet]
     if builder == "xorriso":
-        cmd = ["xorriso", "-as", "mkisofs", "-o", str(out_iso), "-V", "SRC_FX"]
+        cmd = ["xorriso", "-as", "mkisofs", "-o", str(out_iso), "-V", "SRC_FX", *rr_joliet]
     subprocess.run(cmd + [str(src_dir)], check=True, capture_output=True, timeout=60)
     return out_iso
 

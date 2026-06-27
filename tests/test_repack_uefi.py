@@ -78,13 +78,21 @@ def _make_source_iso(src_dir: Path, out_iso: Path, builder: str) -> Path:
 
     Uses whatever builder is available (xorriso preferred, genisoimage
     fallback). The output is a valid ISO 9660 image that 7z can extract.
+
+    -R -J (Rock Ridge + Joliet) extensions are needed so that directory
+    names stay lowercase. Without them, genisoimage uppercases all
+    directory names to ISO 9660 Level 1 spec — ``sources/`` becomes
+    ``SOURCES/`` and repack.sh's ``cp "$WIM_IN" "$WORK/sources/install.wim"``
+    fails with "No such file or directory".
     """
+    rr_joliet_args = ["-R", "-J"]
     if builder == "xorriso":
         subprocess.run(
             [
                 "xorriso", "-as", "mkisofs",
                 "-o", str(out_iso),
                 "-V", "SRC_FX",
+                *rr_joliet_args,
                 str(src_dir),
             ],
             check=True, capture_output=True, timeout=60,
@@ -94,6 +102,7 @@ def _make_source_iso(src_dir: Path, out_iso: Path, builder: str) -> Path:
             [
                 "genisoimage", "-o", str(out_iso),
                 "-V", "SRC_FX",
+                *rr_joliet_args,
                 str(src_dir),
             ],
             check=True, capture_output=True, timeout=60,
