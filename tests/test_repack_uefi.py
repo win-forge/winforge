@@ -112,26 +112,7 @@ def _make_source_iso(src_dir: Path, out_iso: Path, builder: str) -> Path:
     return out_iso
 
 
-def _builder_only_path(target_builder: str) -> str:
-    """Build a PATH that exposes only ``target_builder`` (no xorriso, no oscdimg).
-
-    repack.sh picks the first available builder via ``command -v``. To
-    test what the genisoimage fallback produces, we shadow xorriso and
-    oscdimg with a `false` shim so ``command -v`` finds only genisoimage.
-    The current system PATH is appended so the rest of the script (bash,
-    cp, etc.) still resolves.
-    """
-    shim_dir = Path(os.environ.get("TMPDIR", "/tmp")) / "repack-shims"
-    shim_dir.mkdir(exist_ok=True)
-    for blocked in ("xorriso", "oscdimg", "mkisofs"):
-        shim = shim_dir / blocked
-        if not shim.exists():
-            shim.write_text("#!/bin/sh\nexit 127\n")
-            shim.chmod(0o755)
-    return f"{shim_dir}:{os.environ.get('PATH', '')}"
-
-
-@pytest.mark.skipif(not _have_7z(), reason="7z not installed (needed for repack.sh extraction)")
+@pytest.mark.skipif(not _have_7z(), reason="7z not installed")
 @pytest.mark.parametrize("builder", RUNTIME_BUILDERS)
 def test_repack_produces_iso(tmp_path: Path, builder: str):
     """End-to-end: feed repack.sh a synthetic source ISO and assert it
@@ -244,14 +225,15 @@ def test_repack_genisoimage_produces_bios_only_iso(tmp_path: Path):
     fake_xml.write_text('<?xml version="1.0"?><unattend/>')
 
     out_iso = tmp_path / "out.iso"
-    shadowed_path = _builder_only_path("genisoimage")
+    # Force repack.sh to use genisoimage via REPACK_BUILDER env var,
+    # bypassing its oscdimg→xorriso→genisoimage priority order.
     result = subprocess.run(
         [
             "bash", str(REPACK_SH),
             str(src_iso), str(out_iso),
             str(fake_wim), str(fake_xml),
         ],
-        env={**os.environ, "PATH": shadowed_path},
+        env={**os.environ, "REPACK_BUILDER": "genisoimage"},
         capture_output=True, timeout=120,
     )
     # genisoimage may or may not exit cleanly depending on platform; what

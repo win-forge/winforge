@@ -36,20 +36,19 @@ if [ ! -f "$UEFI_BOOT" ]; then
     exit 1
 fi
 
-# Pick the ISO builder. Priority order matches the Windows ADK preference
-# (oscdimg), then Linux's preferred xorriso. genisoimage is kept as a last
-# resort for environments where neither is available — but it produces
-# BIOS-only ISOs that fail the UEFI verify step, so the resulting build
-# will be flagged (and an actual install would fail to boot on modern UEFI
-# hardware). The right answer in a genisoimage-only environment is to
-# install xorriso (`apt install xorriso`), not to rely on this fallback.
-ISO_BUILDER=""
-if command -v oscdimg >/dev/null 2>&1; then
-    ISO_BUILDER="oscdimg"
-elif command -v xorriso >/dev/null 2>&1; then
-    ISO_BUILDER="xorriso"
-elif command -v genisoimage >/dev/null 2>&1; then
-    ISO_BUILDER="genisoimage"
+# Pick the ISO builder. Priority: $REPACK_BUILDER env var (force), then
+# oscdimg (Windows), xorriso (Linux preferred), genisoimage (fallback).
+# Set REPACK_BUILDER=genisoimage to test the fallback path on systems
+# where xorriso is also installed.
+ISO_BUILDER="${REPACK_BUILDER:-}"
+if [ -z "$ISO_BUILDER" ]; then
+    if command -v oscdimg >/dev/null 2>&1; then
+        ISO_BUILDER="oscdimg"
+    elif command -v xorriso >/dev/null 2>&1; then
+        ISO_BUILDER="xorriso"
+    elif command -v genisoimage >/dev/null 2>&1; then
+        ISO_BUILDER="genisoimage"
+    fi
 fi
 
 if [ -z "$ISO_BUILDER" ]; then
