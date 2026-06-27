@@ -167,7 +167,7 @@ jobs:
       #
       # Detection: if the default checkout is winforge itself (it has
       # scripts/), we don't need a second checkout. Otherwise we do.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Detect if default checkout is winforge
         id: detect
@@ -193,7 +193,7 @@ jobs:
 
       - name: Checkout winforge into .winforge/ (caller mode)
         if: steps.detect.outputs.is_winforge == 'false'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: win-forge/winforge
           ref: ${{ env.WINFORGE_REF }}
