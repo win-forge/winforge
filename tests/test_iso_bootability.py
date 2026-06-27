@@ -45,7 +45,6 @@ import pytest
 from scripts.build.verify_iso_bootable import (
     verify_iso_bootable,
     debug_dump_catalog,
-    BootCheck,
 )
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -573,8 +572,8 @@ class TestRealBuilderOutput:
         (bootable). If it's 0x00, BIOS won't boot.
         """
         with real_xorriso_iso.open("rb") as f:
-            br = f.read(18 * SECTOR)
-            # Seek to catalog
+            f.read(18 * SECTOR)  # seek past headers
+            # Read catalog via the parser's helper
             from scripts.build.verify_iso_bootable import _read_sector
             br_sector = _read_sector(real_xorriso_iso, 17)
             catalog_lba = int.from_bytes(br_sector[0x47:0x4B], "little")

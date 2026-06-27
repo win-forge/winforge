@@ -28,7 +28,6 @@ Usage as a module:
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from scripts.lib.log import info, warn, error

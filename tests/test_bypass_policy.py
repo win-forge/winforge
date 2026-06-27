@@ -2,8 +2,6 @@
 from __future__ import annotations
 from pathlib import Path
 
-import pytest
-
 from scripts.build.bypass_policy import needs_dll_bypass, dlls_available, check
 
 
