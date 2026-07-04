@@ -359,7 +359,14 @@ jobs:
           if [ ! -f "$WIM" ]; then
             echo "No install.wim found — extracting from ISO"
             7z x artifacts/iso-in.iso -oartifacts/iso-extract -bd -y >/dev/null
-            cp artifacts/iso-extract/sources/install.wim "$WIM"
+            # ESD compression produces install.esd, not install.wim.
+            # wimlib-imagex handles both formats; normalize the name.
+            if [ -f artifacts/iso-extract/sources/install.esd ] && [ ! -f artifacts/iso-extract/sources/install.wim ]; then
+              cp artifacts/iso-extract/sources/install.esd "$WIM"
+              echo "Note: using install.esd (ESD compression) renamed to install.wim for injection"
+            else
+              cp artifacts/iso-extract/sources/install.wim "$WIM"
+            fi
           fi
           # wimlib can inject drivers on Linux without DISM
           # Drivers come from .winforge/drivers/pack/intel-rst (synced above).
