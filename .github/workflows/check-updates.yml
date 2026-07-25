@@ -25,7 +25,7 @@ jobs:
       changes: ${{ steps.diff.outputs.changes }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -92,7 +92,7 @@ jobs:
         with:
           # Need full history to compute a sane branch name + avoid shallow-clone bugs
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
