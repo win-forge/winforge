@@ -63,9 +63,8 @@ Name: Windows 11 Home
 
 def test_get_wim_indexes_raises_on_nonzero():
     with patch("scripts.build.bypass_win11_requirements.subprocess.run",
-               return_value=_proc(1, "", "boom")):
-        with pytest.raises(RuntimeError, match="boom"):
-            bypass.get_wim_indexes(Path("install.wim"), "dism")
+               return_value=_proc(1, "", "boom")), pytest.raises(RuntimeError, match="boom"):
+        bypass.get_wim_indexes(Path("install.wim"), "dism")
 
 
 def test_mount_wim_dism_cmd(tmp_path: Path):
@@ -194,8 +193,7 @@ def test_apply_unmounts_with_discard_on_mount_failure(tmp_path: Path):
                side_effect=RuntimeError("boom")), \
          patch("scripts.build.bypass_win11_requirements.unmount_wim") as u, \
          patch("scripts.build.bypass_win11_requirements.detect_tool",
-               return_value="dism"):
-        with pytest.raises(RuntimeError, match="boom"):
-            bypass.apply(bypass.BypassConfig(wim_path=wim, mount_dir=mount, bypass_dir=None))
+               return_value="dism"), pytest.raises(RuntimeError, match="boom"):
+        bypass.apply(bypass.BypassConfig(wim_path=wim, mount_dir=mount, bypass_dir=None))
     u.assert_called_once()
     assert "commit=False" in str(u.call_args) or "--discard" in str(u.call_args) or "/Discard" in str(u.call_args)
