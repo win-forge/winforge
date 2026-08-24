@@ -251,7 +251,7 @@ def test_entry_count_offset_matches_spec(tmp_path: Path):
         cat = (
             _validation_entry()
             + _default_entry()
-            + (lambda e: (e.__setitem__(slice(offset, offset + 2), _s.pack("<H", 1)) or e))(bytearray(32))
+            + (lambda e: (e.__setitem__(slice(offset, offset + 2), _s.pack("<H", 1)) or e))(bytearray(32))  # noqa: PLC3002
         )
         # Patch bytes 0/1 of the section entry
         cat_arr = bytearray(cat)
