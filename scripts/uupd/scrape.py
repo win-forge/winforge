@@ -1,9 +1,12 @@
 """Parse UUP-dump's known.php index into a list of Build records."""
 from __future__ import annotations
+
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
+
 from bs4 import BeautifulSoup
+
 from scripts.lib.log import info
 
 
@@ -47,8 +50,8 @@ def parse_known_page(html: str) -> list[Build]:
 
 
 def fetch_latest() -> list[Build]:
-    import requests
-    r = requests.get("https://uupdump.net/known.php", timeout=30)
+    from scripts.lib.http import get_with_retry
+    r = get_with_retry("https://uupdump.net/known.php", timeout=30)
     r.raise_for_status()
     return parse_known_page(r.text)
 

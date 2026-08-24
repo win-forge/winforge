@@ -16,8 +16,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import requests
-
 
 @dataclass
 class FileEntry:
@@ -114,7 +112,8 @@ def parse_response(html: str) -> ConversionInputs:
 
 
 def fetch(uuid: str, edition: str, lang: str = "en-us") -> ConversionInputs:
-    r = requests.get(build_request(uuid, edition, lang), timeout=60)
+    from scripts.lib.http import get_with_retry
+    r = get_with_retry(build_request(uuid, edition, lang), timeout=60)
     r.raise_for_status()
     return parse_response(r.text)
 

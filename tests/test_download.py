@@ -195,6 +195,79 @@ def test_download_files_sha1_verification_passes(tmp_path: Path, monkeypatch: py
     assert result == [out / "cccc"]
 
 
+def test_get_with_retry_uses_ua_and_backs_off(monkeypatch: pytest.MonkeyPatch):
+    """403/5xx get retried with backoff; success carries the winforge UA."""
+    from scripts.lib.http import USER_AGENT, get_with_retry
+
+    seen_headers: list[dict] = []
+    calls = {"n": 0}
+
+    class FakeResp:
+        def __init__(self, status: int):
+            self.status_code = status
+
+    def fake_get(url, timeout=None, headers=None):
+        seen_headers.append(headers or {})
+        calls["n"] += 1
+        return FakeResp(403 if calls["n"] < 3 else 200)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    monkeypatch.setattr("scripts.lib.http.time.sleep", lambda s: None)
+    resp = get_with_retry("https://uupdump.net/known.php", attempts=3, backoff=0.1)
+    assert resp.status_code == 200
+    assert calls["n"] == 3
+    assert all(h.get("User-Agent") == USER_AGENT for h in seen_headers)
+
+
+def test_get_with_retry_exhausts_and_raises(monkeypatch: pytest.MonkeyPatch):
+    from scripts.lib.http import get_with_retry
+
+    monkeypatch.setattr("requests.get", lambda *a, **k: type("R", (), {"status_code": 503})())
+    monkeypatch.setattr("scripts.lib.http.time.sleep", lambda s: None)
+    with pytest.raises(RuntimeError, match="failed after 2 attempts"):
+        get_with_retry("https://uupdump.net/known.php", attempts=2, backoff=0.1)
+
+
+def test_fetch_latest_goes_through_helper(monkeypatch: pytest.MonkeyPatch):
+    """fetch_latest must route via scripts.lib.http (UA + retry), not bare requests."""
+    from scripts.uupd import scrape
+
+    called = {"helper": False}
+
+    class FakeResp:
+        status_code = 200
+        text = "<html><body>no table</body></html>"
+
+        def raise_for_status(self):
+            pass
+
+    def fake_helper(url, **kwargs):
+        called["helper"] = True
+        return FakeResp()
+
+    monkeypatch.setattr("scripts.lib.http.get_with_retry", fake_helper)
+    scrape.fetch_latest()
+    assert called["helper"]
+
+
+def test_fetch_files_goes_through_helper(monkeypatch: pytest.MonkeyPatch):
+    import scripts.uupd.download as dl
+
+    class FakeResp:
+        status_code = 200
+        text = "<html></html>"
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        "scripts.lib.http.get_with_retry",
+        lambda url, **k: FakeResp(),
+    )
+    inputs = dl.fetch(UUID, "professional")
+    assert inputs.files == []
+
+
 def test_download_files_sha1_verification_fails_on_corrupt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Corrupted download (sha1 mismatch) must raise, not pass silently."""
     inputs = ConversionInputs(

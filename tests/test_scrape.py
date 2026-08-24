@@ -1,6 +1,8 @@
 from pathlib import Path
+
 import pytest
-from scripts.uupd.scrape import parse_known_page, Build
+
+from scripts.uupd.scrape import Build, parse_known_page
 
 FIX = Path(__file__).parent / "fixtures" / "known_uup.html"
 
