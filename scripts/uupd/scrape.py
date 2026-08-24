@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
@@ -43,7 +43,11 @@ def parse_known_page(html: str) -> list[Build]:
         m_date = _DATE_RE.search(date_text)
         iso_date = ""
         if m_date:
-            iso_date = datetime.strptime(m_date.group(1), "%Y-%m-%d %H:%M:%S").isoformat() + "Z"
+            iso_date = (
+                datetime.strptime(m_date.group(1), "%Y-%m-%d %H:%M:%S")
+                .replace(tzinfo=timezone.utc)
+                .isoformat()
+            )
         out.append(Build(title=title, arch=arch, uuid=m_uuid.group(1), added_at=iso_date))
     info("scrape.parsed", count=len(out))
     return out

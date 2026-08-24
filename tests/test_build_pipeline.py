@@ -33,10 +33,7 @@ def test_build_workflow_supports_both_dispatch_types():
     """build.yml must accept both workflow_call and repository_dispatch."""
     data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
     triggers = data.get("on", data.get(True, {}))
-    if isinstance(triggers, list):
-        trigger_names = triggers
-    else:
-        trigger_names = list(triggers.keys())
+    trigger_names = triggers if isinstance(triggers, list) else list(triggers.keys())
     assert "workflow_call" in trigger_names
     assert "repository_dispatch" in trigger_names
 
@@ -61,10 +58,7 @@ def test_build_workflow_supports_workflow_call_for_caller_repo():
     """
     data = yaml.safe_load((WORKFLOWS_DIR / "build.yml").read_text())
     triggers = data.get("on", data.get(True, {}))
-    if isinstance(triggers, list):
-        trigger_names = triggers
-    else:
-        trigger_names = list(triggers.keys())
+    trigger_names = triggers if isinstance(triggers, list) else list(triggers.keys())
     assert "workflow_call" in trigger_names, "build.yml must support workflow_call"
 
     # Inputs include the canonical profile + the override fields

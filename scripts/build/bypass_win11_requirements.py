@@ -21,6 +21,7 @@ via `wimlib-imagex`. Auto-detected by platform.
 """
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
 import sys
@@ -77,10 +78,8 @@ def get_wim_indexes(wim: Path, tool: str) -> list[int]:
         if line.lower().startswith("index"):
             parts = line.split(":", 1)
             if len(parts) == 2:
-                try:
+                with contextlib.suppress(ValueError):
                     idxs.append(int(parts[1].strip()))
-                except ValueError:
-                    pass
     return idxs
 def mount_wim(wim: Path, mount: Path, index: int, tool: str) -> None:
     mount.mkdir(parents=True, exist_ok=True)
@@ -147,10 +146,8 @@ def apply(cfg: BypassConfig) -> dict[str, Any]:
                 patched.extend(patch_dlls(cfg.mount_dir, cfg.bypass_dir))  # type: ignore[arg-type]
             unmount_wim(cfg.mount_dir, tool, commit=True)
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 unmount_wim(cfg.mount_dir, tool, commit=False)
-            except Exception:
-                pass
             raise
         info("bypass.index.done", index=idx)
 

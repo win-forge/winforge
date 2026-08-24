@@ -82,8 +82,8 @@ def test_find_config_root_resolves_to_config_subdir(monkeypatch, tmp_path: Path)
     monkeypatch.setenv("WINFORGE_CONFIG_ROOT", str(tmp_path))
     from scripts.profiles import load
     load.reset_config_root()
-    assert load.CONFIG_ROOT == tmp_path / "config"
-    assert load.PROFILES_DIR == tmp_path / "config" / "profiles"
+    assert tmp_path / "config" == load.CONFIG_ROOT
+    assert tmp_path / "config" / "profiles" == load.PROFILES_DIR
 
 
 def test_find_config_root_resolves_to_pointed_path_when_no_config_subdir(
@@ -94,8 +94,8 @@ def test_find_config_root_resolves_to_pointed_path_when_no_config_subdir(
     monkeypatch.setenv("WINFORGE_CONFIG_ROOT", str(tmp_path))
     from scripts.profiles import load
     load.reset_config_root()
-    assert load.CONFIG_ROOT == tmp_path
-    assert load.PROFILES_DIR == tmp_path / "profiles"
+    assert tmp_path == load.CONFIG_ROOT
+    assert tmp_path / "profiles" == load.PROFILES_DIR
 
 
 def test_find_config_root_relative_to_workspace(monkeypatch, tmp_path: Path):
@@ -108,7 +108,7 @@ def test_find_config_root_relative_to_workspace(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("WINFORGE_CONFIG_ROOT", ".")
     from scripts.profiles import load
     load.reset_config_root()
-    assert load.CONFIG_ROOT == tmp_path / "config"
+    assert tmp_path / "config" == load.CONFIG_ROOT
 
 
 def test_load_ltsc_profile_has_esd_compression():
