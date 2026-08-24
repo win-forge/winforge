@@ -43,8 +43,8 @@ from pathlib import Path
 import pytest
 
 from scripts.build.verify_iso_bootable import (
-    verify_iso_bootable,
     debug_dump_catalog,
+    verify_iso_bootable,
 )
 
 REPO_ROOT = Path(__file__).parent.parent

@@ -1,6 +1,8 @@
 """Match a UUP-dump Build against our product config; return a normalized record or None."""
 from __future__ import annotations
+
 from pathlib import Path
+
 from scripts.lib.yaml import load
 from scripts.uupd.scrape import Build
 

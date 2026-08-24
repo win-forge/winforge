@@ -14,15 +14,16 @@ Auth: `Authorization: Bearer <jwt>` header. JWT lives in the `GOFILE_TOKEN`
 secret.
 """
 from __future__ import annotations
+
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
-import os
-import sys
+
 import requests
 
-from scripts.lib.log import info, error, warn
-
+from scripts.lib.log import error, info, warn
 
 API_BASE = "https://api.gofile.io"
 HTTP_TIMEOUT = 30

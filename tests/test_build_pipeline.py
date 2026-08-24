@@ -4,6 +4,7 @@ Mocks external tools (7z, oscdimg, aria2, rclone) and verifies the full
 build pipeline is wired up correctly: download → convert → inject → repack → assign → upload.
 """
 from __future__ import annotations
+
 import json
 import subprocess
 import sys

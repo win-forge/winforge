@@ -19,15 +19,17 @@ Schema:
     uup_title: <override>       # optional: human-readable title for the pinned build
 """
 from __future__ import annotations
-import os
-from dataclasses import dataclass
-from pathlib import Path
+
 import argparse
+import os
 import re
 import sys
+from dataclasses import dataclass
+from pathlib import Path
+
 import yaml
 
-from scripts.lib.log import info, error
+from scripts.lib.log import error, info
 
 
 def _find_config_root() -> Path:

@@ -20,6 +20,7 @@ This script does (2). Works on the Windows runner via `dism`, on Linux
 via `wimlib-imagex`. Auto-detected by platform.
 """
 from __future__ import annotations
+
 import shutil
 import subprocess
 import sys
@@ -27,8 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scripts.lib.log import info, warn, error
-
+from scripts.lib.log import error, info, warn
 
 PATCHABLE_DLLS = ("appraiserres.dll", "appraiser.dll")
 

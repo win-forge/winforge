@@ -5,11 +5,13 @@ handles_products and (b) have enough free quota (used_gb + iso_gb <= quota_gb).
 The caller persists used_gb back to the pool manifest after a successful upload.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+
 import yaml
 
-from scripts.lib.log import info, error
+from scripts.lib.log import error, info
 
 
 @dataclass

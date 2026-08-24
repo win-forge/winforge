@@ -1,5 +1,7 @@
 import pytest
-from scripts.rclone.assign import assign, Account
+
+from scripts.rclone.assign import Account, assign
+
 
 def make_accounts():
     return [

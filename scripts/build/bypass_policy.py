@@ -30,7 +30,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from scripts.lib.log import info, warn, error
+from scripts.lib.log import error, info, warn
 from scripts.lib.yaml import load
 
 

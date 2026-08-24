@@ -1,13 +1,15 @@
-from pathlib import Path
 import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
+
 import pytest
+
 from scripts.profiles.load import (
+    _PROFILE_NAME_RE,
     Profile,
     ProfileError,
-    _PROFILE_NAME_RE,
     _from_dict,
     list_profiles,
     load,

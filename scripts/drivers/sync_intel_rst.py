@@ -12,13 +12,16 @@ is why the release-asset path is preferred. Both paths handle both old format
 version).
 """
 from __future__ import annotations
+
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
 import requests
-from scripts.lib.log import info, error
+
+from scripts.lib.log import error, info
 from scripts.lib.sha import file_sha256
 
 DOWNLOAD_PAGE = (

@@ -1,5 +1,7 @@
 from pathlib import Path
+
 from scripts.lib.yaml import load
+
 
 def test_loads_valid(tmp_path: Path):
     p = tmp_path / "a.yaml"

@@ -1,6 +1,8 @@
 """Expand editions.yaml + a product name into the full build matrix rows."""
 from __future__ import annotations
+
 from pathlib import Path
+
 from scripts.lib.yaml import load
 
 

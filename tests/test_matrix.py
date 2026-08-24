@@ -1,5 +1,7 @@
 from pathlib import Path
+
 from scripts.build.matrix import expand
+
 
 def test_expand_win11_24h2_includes_pro_and_enterprise():
     rows = expand(Path("config/editions.yaml"))

@@ -1,5 +1,6 @@
 from scripts.build.inject_autounattend import render
 
+
 def test_renders_replacements():
     tpl = "user={{USER}} pass={{PASS}}"
     out = render(tpl, {"USER": "yoav", "PASS": "hunter2"})

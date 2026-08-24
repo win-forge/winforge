@@ -1,5 +1,6 @@
 """Thin wrapper over PyYAML with schema-error context."""
 from pathlib import Path
+
 import yaml
 
 

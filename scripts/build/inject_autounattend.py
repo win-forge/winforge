@@ -1,5 +1,6 @@
 """Render `{{KEY}}` placeholders in a file/string."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
 

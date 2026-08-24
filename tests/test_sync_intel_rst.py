@@ -1,9 +1,11 @@
 from pathlib import Path
+
 import pytest
+
 from scripts.drivers.sync_intel_rst import (
     extract_version_from_filename,
-    find_driver_root,
     fetch_latest_metadata,
+    find_driver_root,
 )
 
 

@@ -1,7 +1,8 @@
 """Tests for scripts.build.bypass_win11_requirements — uses a stub tool, no real WIMs."""
 from __future__ import annotations
+
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -1,5 +1,6 @@
 """Track which UUP-dump builds we've already seen, emit only new ones."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
 

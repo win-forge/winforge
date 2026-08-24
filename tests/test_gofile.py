@@ -1,7 +1,8 @@
 """Tests for scripts.gofile.upload. All network calls are mocked — never hit gofile in CI."""
 from __future__ import annotations
+
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

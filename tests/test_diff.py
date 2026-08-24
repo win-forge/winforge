@@ -1,5 +1,7 @@
 from pathlib import Path
-from scripts.uupd.diff import load_known, save_known, diff_new
+
+from scripts.uupd.diff import diff_new, load_known, save_known
+
 
 def test_first_run_treats_everything_as_new(tmp_path: Path):
     state = tmp_path / "known.json"

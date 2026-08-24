@@ -1,6 +1,7 @@
 from scripts.uupd.resolve import resolve
 from scripts.uupd.scrape import Build
 
+
 def make(title: str, arch: str = "x64") -> Build:
     return Build(title=title, arch=arch, uuid="x" * 36, added_at="2026-01-01T00:00:00Z")
 

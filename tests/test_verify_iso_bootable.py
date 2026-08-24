@@ -14,7 +14,6 @@ import pytest
 
 from scripts.build.verify_iso_bootable import verify_iso_bootable
 
-
 SECTOR = 2048
 
 

@@ -1,9 +1,9 @@
 """Tests for scripts.build.bypass_policy."""
 from __future__ import annotations
+
 from pathlib import Path
 
-from scripts.build.bypass_policy import needs_dll_bypass, dlls_available, check
-
+from scripts.build.bypass_policy import check, dlls_available, needs_dll_bypass
 
 # --- needs_dll_bypass ---
 
