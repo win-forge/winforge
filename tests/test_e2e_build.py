@@ -12,6 +12,7 @@ without crashing, not that it produces a real Windows ISO.
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -72,7 +73,7 @@ def test_assign_account_selects_smallest_pool(tmp_path: Path):
     # All three can host a 5GB ISO for win11-24h2. The first one (od1) is picked
     # by round-robin (cursor=0).
     result = subprocess.run(
-        ["python", "-m", "scripts.rclone.assign", "win11-24h2", "5.0", str(f)],
+        [sys.executable, "-m", "scripts.rclone.assign", "win11-24h2", "5.0", str(f)],
         capture_output=True, text=True, cwd=REPO_ROOT, timeout=10,
     )
     assert result.returncode == 0, f"assign failed: {result.stderr}"
@@ -90,7 +91,7 @@ def test_assign_rejects_when_no_account_handles_product(tmp_path: Path):
     f = tmp_path / "accounts.yaml"
     f.write_text(yaml.safe_dump(accounts))
     result = subprocess.run(
-        ["python", "-m", "scripts.rclone.assign", "win11-24h2", "5.0", str(f)],
+        [sys.executable, "-m", "scripts.rclone.assign", "win11-24h2", "5.0", str(f)],
         capture_output=True, text=True, cwd=REPO_ROOT, timeout=10,
     )
     assert result.returncode != 0
