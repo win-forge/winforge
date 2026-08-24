@@ -11,6 +11,10 @@ name: on-push-products
 # changed. winforge-configs will read its own profiles/ to figure out
 # which to build.
 
+concurrency:
+  group: on-push-products-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     branches: [main]
@@ -58,8 +62,6 @@ jobs:
           with open(os.environ.get('GITHUB_OUTPUT', '/tmp/_out'), 'a') as f:
               f.write(f"products={','.join(changed)}\n")
           PY
-        env:
-          GITHUB_OUTPUT: ${{ github.output }}
       - name: Detect products (manual dispatch)
         id: detect-manual
         if: github.event_name == 'workflow_dispatch'
@@ -84,7 +86,7 @@ jobs:
           PAYLOAD=$(python3 -c "import json,sys; print(json.dumps({'products': '$PRODUCTS'.split(',')}))")
           echo "Dispatching product-updated to win-forge/winforge-configs: $PRODUCTS"
           curl -sS -X POST \
-            -H "Authorization: token $WINFORGE_CONFIGS_TOKEN" \
+            -H "Authorization: token $WINFORGE_CONFIGS_TOKEN"
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/json" \
             "https://api.github.com/repos/win-forge/winforge-configs/dispatches" \

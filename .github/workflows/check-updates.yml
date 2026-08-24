@@ -148,4 +148,9 @@ jobs:
               lines.append(f\"  - title: {c['new_title']}\")
           print('\n'.join(lines))
           ")
+          # gh does NOT read the implicit Actions token automatically —
+          # without GH_TOKEN the PR creation step always fails with an auth
+          # error (branch pushes fine via git, then dies here).
           gh pr create --title "Auto: bump product UUIDs" --body "$BODY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
