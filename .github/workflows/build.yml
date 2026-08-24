@@ -208,7 +208,7 @@ jobs:
           ref: ${{ env.WINFORGE_REF }}
           path: .winforge
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
