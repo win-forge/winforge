@@ -74,19 +74,27 @@ gh api repos/win-forge/winforge/dispatches \
 3. **Renders `{{PLACEHOLDER}}` tokens** in the autounattend template against GitHub Actions Secrets from the caller's repo.
 4. **Downloads UUPs** → runs the UUP-dump converter → produces a stock ISO.
 5. **Injects Intel RST drivers** into the WIM (gracefully skips if Intel's CDN WAF-blocks the request).
-6. **Bypasses the Win11 system-requirement check** (TPM 2.0 / Secure Boot / 4 GB RAM / CPU) — always via the `LabConfig` registry keys in the autounattend, plus an optional DLL patch for 24H2+ SKUs that block the registry trick. See [`docs/bypass.md`](docs/bypass.md).
+6. **Bypasses the Win11 system-requirement check** (TPM 2.0 / Secure Boot / 4 GB RAM / CPU) — always via the `LabConfig` registry keys in the autounattend, plus a DLL patch (vendored at `bypass/<product>/`) for editions where Microsoft blocks the registry trick. See [`docs/bypass.md`](docs/bypass.md).
 7. **Repacks the ISO** with the rendered autounattend baked in.
 8. **Uploads to gofile.io** (new — primary destination) and optionally to a pool of Google Drive accounts via rclone.
 9. **Uploads ISO as a debug artifact** (7-day retention).
 
 ## Required Secrets (set on the caller/config repo)
 
+> [!WARNING]
+> **The rendered autounattend.xml embeds your local-admin password in plaintext inside the ISO.**
+> Every ISO built by this pipeline contains `LOCAL_ADMIN_PASS` (and optionally `PRODUCT_KEY`) baked
+> into `autounattend.xml` on the image. That means the gofile.io upload link is publicly downloadable
+> by anyone who has it, and the debug artifact copies carry it too. Only distribute finished-ISO links
+> to people you trust with those credentials, rotate the admin password if a link leaks, and prefer
+> `oobe-skip.xml` (no placeholders) when credentials aren't needed.
+
 | Secret | Required? | Used for |
 |---|---|---|
 | `RCLONE_CONF` | yes | rclone config (Google Drive account pool) |
 | `ACCOUNTS_YAML` | yes | `config/accounts.yaml` content (account pool metadata) |
 | `GOFILE_TOKEN` | optional | gofile.io JWT (free account). If empty, uploads as guest and content expires in ~10 days. |
-| `BYPASS_DLLS_B64` | optional | base64 tarball of bypass DLLs from `winforge-private/bypass/<product>/`. If empty, only the registry tweak is applied. |
+| ~~`BYPASS_DLLS_B64`~~ | removed | no longer used — bypass DLLs are vendored at `bypass/<product>/` in this repo (see [`bypass/README.md`](bypass/README.md)) |
 | `LOCAL_ADMIN_NAME` | if your autounattend uses `{{LOCAL_ADMIN_NAME}}` |
 | `LOCAL_ADMIN_PASS` | if your autounattend uses `{{LOCAL_ADMIN_PASS}}` (PlainText) |
 | `COMPUTER_NAME` | optional | `{{COMPUTER_NAME}}` in autounattend |

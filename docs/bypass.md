@@ -39,43 +39,47 @@ with patched versions that return "compatible" for any hardware.
 
 ### Source DLLs
 
-The DLLs are version-specific and go in the **private repo**, not the
-public one. Layout:
+The DLLs are version-specific and are **vendored directly in this repo**
+at `bypass/<product>/` (this replaces an earlier private-repo +
+base64-secret design — see the decision record in
+[`bypass/README.md`](../bypass/README.md)):
 
 ```
-winforge-private/
-  bypass/
-    win11-24h2/
-      appraiserres.dll
-      appraiser.dll
-    win11-25h2/
-      appraiserres.dll
-      appraiser.dll
+bypass/
+  win11-24h2/
+    appraiserres.dll
+    appraiser.dll
+  win11-25h2/
+    appraiserres.dll
+    appraiser.dll
 ```
 
 You can grab them from any community source (e.g.
 [AveYo/MediaCreationTool](https://github.com/AveYo/MediaCreationTool)'s
 `Skip_TPM_Check_on_Dynamic_Update.cmd` fetches them, or use the
-`bypass11/` directory directly from a release tarball).
+`bypass11/` directory directly from a release tarball). The pair must be
+version-matched to the target build — see the locking notes in
+[`bypass/README.md`](../bypass/README.md).
 
 ### Wiring
 
-Build a tarball of `bypass/<product>/` and base64-encode it:
+No secrets or extra setup: drop the two DLLs into
+`bypass/<product>/` in this repo and commit. At build time the
+"Check Win11 bypass policy" step (`scripts/build/bypass_policy.py`) reads
+the `needs_dll_bypass` flag for the product+edition from
+`config/editions.yaml`:
 
-```bash
-cd winforge-private/bypass
-tar czf - win11-24h2/ win11-25h2/ | base64 -w0 > bypass-dlls.b64
-```
-
-Add as Actions secret `BYPASS_DLLS_B64` on the public repo. The build
-workflow auto-extracts into `artifacts/bypass/` and runs the patch step.
-If the secret is absent, only the registry tweak is applied.
+- flag not set → DLL steps skipped entirely (registry tweak only)
+- flag set + DLLs present → staged into `artifacts/bypass/` and patched
+  into the WIM
+- flag set + DLLs missing → build **fails fast** with a pointer to
+  `bypass/README.md`
 
 ## How the build flow works
 
 ```
 convert.sh          # UUP -> ISO
-dism-helpers.ps1    # inject Intel RST drivers
+wimlib-imagex       # inject Intel RST drivers (build.yml step, Linux)
 bypass_win11_requirements.py   # DLL patch (optional) + commit WIM
 repack.sh           # install.wim + autounattend.xml -> final ISO
                      # autounattend carries the LabConfig registry keys
