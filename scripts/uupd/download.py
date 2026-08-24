@@ -7,13 +7,15 @@ UUP-dump's modern API (as of mid-2026):
 - No separate converter scripts to download — we extract everything from the page
 """
 from __future__ import annotations
-from dataclasses import dataclass
-from pathlib import Path
+
 import argparse
 import hashlib
 import json
 import re
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
 import requests
 
 
@@ -150,6 +152,38 @@ def download_files(inputs: ConversionInputs, output_dir: Path) -> list[Path]:
     # Write the SHA-1 manifest
     if inputs.sha1_manifest:
         (output_dir / "SHA1").write_text(inputs.sha1_manifest + "\n")
+
+    # Verify downloaded files against UUP-dump's SHA-1 manifest.
+    # Without this, truncated/corrupted downloads only surface as a cryptic
+    # converter failure 20 minutes later (or worse, silently produce a
+    # broken WIM). Files missing from the manifest are skipped but counted.
+    expected: dict[str, str] = {
+        f.guid_filename: f.sha1.lower() for f in inputs.files if f.sha1
+    }
+    verified = mismatches = skipped = 0
+    problems: list[str] = []
+    for guid, want in expected.items():
+        path = output_dir / guid
+        if not path.exists() or path.stat().st_size == 0:
+            problems.append(f"MISSING: {guid} (expected sha1 {want})")
+            continue
+        h = hashlib.sha1()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        got = h.hexdigest()
+        if got != want:
+            problems.append(f"MISMATCH: {guid} expected {want}, got {got}")
+            mismatches += 1
+        else:
+            verified += 1
+    skipped = len(inputs.files) - len(expected)
+    print(f"[download] sha1 verification: verified={verified} "
+          f"mismatched={mismatches} unmanifested={skipped}")
+    if problems:
+        raise RuntimeError(
+            "UUP download integrity check FAILED:\n  " + "\n  ".join(problems)
+        )
 
     # Generate sha256 hashes of what we actually downloaded
     hashes = {}

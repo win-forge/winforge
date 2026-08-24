@@ -1,15 +1,17 @@
-from pathlib import Path
 import hashlib
-import pytest
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
+
 from scripts.uupd.download import (
-    build_request,
-    parse_response,
-    fetch,
-    download_files,
+    _CDN_URL_RE,
     ConversionInputs,
     FileEntry,
-    _CDN_URL_RE,
+    build_request,
+    download_files,
+    fetch,
+    parse_response,
 )
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -128,7 +130,7 @@ def test_download_files_runs_aria2_and_writes_hashes(tmp_path: Path, monkeypatch
                 url="http://tlu.dl.delivery.mp.microsoft.com/filestreamingservice/files/aaaa?P1=1",
                 guid_filename="aaaa",
                 target_name="A.cab",
-                sha1="159a0502dda74856f91807ebde158bc10b3eaf10",
+                sha1="606ec6e9bd8a8ff2ad14e5fade3f264471e82251",  # actual sha1 of the fake payload b"AAA"
             ),
             FileEntry(
                 url="http://tlu.dl.delivery.mp.microsoft.com/filestreamingservice/files/bbbb?P1=1",
@@ -169,3 +171,46 @@ def test_download_files_runs_aria2_and_writes_hashes(tmp_path: Path, monkeypatch
     # aria2 input file references Microsoft CDN
     aria2 = (out / "aria2.txt").read_text()
     assert "tlu.dl.delivery.mp.microsoft.com" in aria2
+
+
+def test_download_files_sha1_verification_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """When content matches the manifest sha1, download_files succeeds."""
+    payload = b"REAL-CONTENT"
+    inputs = ConversionInputs(
+        files=[FileEntry(
+            url="http://tlu.dl.delivery.mp.microsoft.com/files/cccc?P1=1",
+            guid_filename="cccc",
+            target_name="C.cab",
+            sha1=hashlib.sha1(payload).hexdigest(),
+        )],
+        rename_cmd="",
+        sha1_manifest="",
+        raw_html="",
+    )
+    out = tmp_path / "uup"
+    out.mkdir()
+    (out / "cccc").write_bytes(payload)
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: MagicMock(returncode=0, stdout="", stderr=""))
+    result = download_files(inputs, out)
+    assert result == [out / "cccc"]
+
+
+def test_download_files_sha1_verification_fails_on_corrupt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Corrupted download (sha1 mismatch) must raise, not pass silently."""
+    inputs = ConversionInputs(
+        files=[FileEntry(
+            url="http://tlu.dl.delivery.mp.microsoft.com/files/dddd?P1=1",
+            guid_filename="dddd",
+            target_name="D.cab",
+            sha1="0" * 40,
+        )],
+        rename_cmd="",
+        sha1_manifest="",
+        raw_html="",
+    )
+    out = tmp_path / "uup"
+    out.mkdir()
+    (out / "dddd").write_bytes(b"corrupted-or-truncated-data")
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: MagicMock(returncode=0, stdout="", stderr=""))
+    with pytest.raises(RuntimeError, match="integrity check FAILED"):
+        download_files(inputs, out)
