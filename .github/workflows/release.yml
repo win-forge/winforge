@@ -24,11 +24,20 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
         run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists; reusing"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Bare major tags (v1, v2, ...) are MOVABLE: they must track main so
+          # consumers pinning @v1 get current stable. Without this they stay
+          # frozen at the first release forever.
+          if [[ "$TAG" =~ ^v[0-9]+$ ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Major tag $TAG exists — moving it to current HEAD ($GITHUB_SHA)"
+            git push origin ":refs/tags/$TAG"
+            git tag -fa "$TAG" -m "Release $TAG"
+            git push origin "refs/tags/$TAG"
+            echo "Moved major tag $TAG -> $(git rev-parse --short HEAD)"
+          elif git rev-parse "$TAG^{commit}" >/dev/null 2>&1 && git rev-parse "origin/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on remote; reusing"
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag -a "$TAG" -m "Release $TAG"
             git push origin "$TAG"
             echo "Created + pushed tag $TAG"
@@ -39,14 +48,20 @@ jobs:
           TAG: ${{ inputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # If a release with this tag already exists, skip
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; skipping"
-            exit 0
-          fi
           # Resolve the tag to its commit SHA (--target needs SHA, not tag name)
           TAG_SHA=$(git rev-parse "$TAG^{commit}")
           echo "Tag $TAG points at $TAG_SHA"
+          # If a release with this tag already exists: for movable major tags,
+          # re-target it at the new SHA; otherwise skip.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$TAG" =~ ^v[0-9]+$ ]]; then
+              echo "Major-tag release $TAG exists — updating target to $TAG_SHA"
+              gh release edit "$TAG" --target "$TAG_SHA"
+              exit 0
+            fi
+            echo "Release $TAG already exists; skipping"
+            exit 0
+          fi
           # Auto-generate release notes from the commits since the previous tag
           PREV=$(git tag --sort=-version:refname | grep -v "^$TAG$" | head -1)
           if [ -n "$PREV" ]; then
