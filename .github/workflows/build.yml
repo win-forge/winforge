@@ -74,6 +74,12 @@ on:
         type: string
         default: "win11-prod"
 
+# One ISO build per label at a time — concurrent builds would race for the
+# same artifacts/ dir and double-spend the ~100GB LVM volume.
+concurrency:
+  group: winforge-build-${{ inputs.profile || github.event.client_payload.profile || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     # Ubuntu: UUP-dump converter uses wimlib, cabextract, chntpw, genisoimage
@@ -108,7 +114,10 @@ jobs:
       # UUP→WIM conversion can hit 8GB+ intermediate; runner ships 25-29GB free
       # of 84GB total. Concat / and /mnt via LVM to get ~60GB usable.
       - name: Maximize build disk space
-        uses: easimon/maximize-build-space@master
+        # Pinned to v10 (latest release tag) instead of @master — a floating
+        # third-party ref is a supply-chain risk (the action runs with broad
+        # runner permissions and remounts the workspace).
+        uses: easimon/maximize-build-space@v10
         with:
           # Leave room for apt installs (~500MB) + a buffer. Conversion peak
           # is ~8GB WIM + ~5GB UUPs.
@@ -530,6 +539,11 @@ jobs:
             --edition "$EDITION")
           echo "$URLS" | tee artifacts/gofile-urls.txt
 
+          # Publish a checksum so downloaders can verify the ISO end-to-end.
+          ISO_SHA=$(sha256sum "artifacts/${OUT_NAME}.iso" | cut -d' ' -f1)
+          echo "$ISO_SHA  ${OUT_NAME}.iso" > artifacts/SHA256SUMS
+          echo "ISO sha256: $ISO_SHA"
+
           # Parse key=value lines from the script's stdout. Tolerate empty values
           # and the guest-token warning line (no '='). Skips nothing — extra lines
           # just get ignored.
@@ -544,6 +558,9 @@ jobs:
             echo ""
             echo "- **Product / edition:** \`$PRODUCT / $EDITION\`"
             echo "- **ISO:** \`${OUT_NAME}.iso\`"
+            if [ -n "${ISO_SHA:-}" ]; then
+              echo "- **SHA256:** \`$ISO_SHA\`"
+            fi
             if [ -n "${GOFILE[folder_url]:-}" ]; then
               echo "- **Download page:** ${GOFILE[folder_url]}"
             fi
@@ -572,6 +589,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: iso-${{ env.LABEL || format('{0}-{1}', env.PRODUCT, env.EDITION) }}
-          path: artifacts/*.iso
+          path: |
+            artifacts/*.iso
+            artifacts/SHA256SUMS
           retention-days: 7
           if-no-files-found: ignore
