@@ -1,0 +1,140 @@
+# Boot smoke test: actually boot a built ISO under QEMU (OVMF + SeaBIOS)
+# and watch the screen for Windows Setup. Complements the structural
+# El Torito check in build.yml — this proves the firmware accepts the
+# disc and executes the boot image, not just that the catalog parses.
+#
+# Triggers:
+#   1. workflow_dispatch  — manual: point it at any build artifact by run_id
+#   2. workflow_run       — automatically after every successful build.yml
+#                           run on main
+#
+# Runs entirely on GitHub-hosted ubuntu runners (no KVM → TCG emulation;
+# ~2-6 min per leg to reach the Setup splash, budget-capped).
+
+name: boot-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "build.yml run ID whose artifacts to test (default: latest on main)"
+        required: false
+        type: string
+      legs:
+        description: "Firmware legs to test"
+        type: choice
+        options: [both, uefi, bios]
+        default: both
+      budget:
+        description: "Seconds per leg before giving up"
+        required: false
+        default: "1200"
+
+  workflow_run:
+    workflows: ["build"] # build.yml declares `name: build`
+    types: [completed]
+
+permissions:
+  actions: read # download artifacts from the triggering run
+  contents: read
+
+concurrency:
+  group: boot-smoke-${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    # workflow_run fires for ANY completed 'build' workflow — only proceed
+    # on success, and only for runs on main (PR branches are covered by ci.yml).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install QEMU + OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf
+          ls -la /usr/share/OVMF/OVMF_CODE.fd
+
+      - name: Resolve target build run
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RID="${{ inputs.run_id || github.event.workflow_run.id }}"
+          if [ -z "$RID" ] || [ "$RID" = "null" ]; then
+            # latest successful build run on main
+            RID=$(gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?branch=main&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id')
+          fi
+          echo "Using build run: $RID"
+          echo "run_id=$RID" >> "$GITHUB_OUTPUT"
+
+      - name: Download ISO artifact(s)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p work
+          gh api "repos/${{ github.repository }}/actions/runs/${{ steps.target.outputs.run_id }}/artifacts" \
+            --paginate --jq '.artifacts[] | select(.name | test("iso|ISO")) | [.id, .name] | @tsv' > work/artifacts.tsv
+          cat work/artifacts.tsv
+          [ -s work/artifacts.tsv ] || { echo "::error::No ISO artifacts found on run ${{ steps.target.outputs.run_id }}"; exit 1; }
+          while IFS=$'\t' read -r aid aname; do
+            echo "Downloading $aname ($aid)"
+            gh api "repos/${{ github.repository }}/actions/artifacts/$aid/zip" > "work/$aname.zip"
+            unzip -q -o "work/$aname.zip" -d "work/$aname" '*.iso'
+          done < work/artifacts.tsv
+          find work -name '*.iso' -printf '%p %s bytes\n'
+
+      - name: Run boot smoke (UEFI + BIOS legs)
+        run: |
+          pip install -e .
+          ISOS=$(find work -name '*.iso' | head -5)   # cap: worst case matrix of products
+          rc=0
+          for ISO in $ISOS; do
+            NAME=$(basename "$ISO" .iso)
+            echo "=== Smoke-testing $NAME ==="
+            python -m scripts.test.qemu_boot_smoke "$ISO" \
+              --legs "${{ inputs.legs || 'both' }}" \
+              --budget "${{ inputs.budget || '1200' }}" \
+              --outdir "smokeout/$NAME" || rc=1
+          done
+          exit $rc
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Boot smoke results"
+            echo ""
+            for f in smokeout/*/smoke-report.json; do
+              [ -f "$f" ] || continue
+              NAME=$(basename "$(dirname "$f")")
+              echo "### $NAME"
+              echo '```json'
+              cat "$f"
+              echo '```'
+              echo ""
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload frames + logs + reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: boot-smoke-evidence
+          path: |
+            smokeout/**/frame_*.ppm
+            smokeout/**/firmware_*.log
+            smokeout/**/smoke-report.json
+          retention-days: 14

@@ -27,6 +27,15 @@ uv venv && uv pip install -e ".[dev]"
 - **`boot-test`** job: installs the real ISO toolchain (xorriso, genisoimage,
   p7zip-full, isolinux, syslinux-common) and runs the bootability test suite.
   Locally those tests **auto-skip** unless the tools are installed:
+  
+- **`boot-smoke.yml`** (post-build on main): boots every produced ISO in
+  QEMU under OVMF + SeaBIOS and requires Windows Setup to appear on the
+  framebuffer. To test the harness locally you need
+  `sudo apt-get install qemu-system-x86 ovmf`, then:
+
+  ```bash
+  python -m scripts.test.qemu_boot_smoke path/to.iso --legs uefi --budget 900
+  ```
 
   ```bash
   sudo apt-get install -y xorriso genisoimage p7zip-full isolinux syslinux-common

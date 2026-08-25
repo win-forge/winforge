@@ -129,9 +129,25 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
+
 See `.github/workflows/` for CI entry points. `build.yml` is the reusable
 workflow (consumed by config repos); `check-updates.yml` runs daily to detect
-new UUP-dump builds; `ci.yml` is PR-time linting.
+new UUP-dump builds; `ci.yml` is PR-time linting; `boot-smoke.yml` boots
+every built ISO under QEMU (OVMF + SeaBIOS) and fails if Windows Setup
+never appears on the framebuffer.
+
+### Boot verification layers
+
+1. **Structural** — `build.yml` runs
+   [`verify_iso_bootable.py`](scripts/build/verify_iso_bootable.py) on every
+   produced ISO: parses the El Torito boot catalog and requires a non-empty
+   EFI section (`file` alone can't see this).
+2. **Behavioral** — `boot-smoke.yml` actually boots the ISO in QEMU after
+   every main-branch build: OVMF leg proves the UEFI chain executes,
+   SeaBIOS leg proves BIOS. Screenshots + firmware logs are uploaded as
+   `boot-smoke-evidence`. Manual re-runs: dispatch it with a build run ID.
+3. **Install-level** — not automated; autounattend correctness beyond the
+   first splash screen is verified by hand on real hardware.
 
 Additional docs:
 - [`docs/gofile.md`](docs/gofile.md) — gofile.io upload (guest vs account mode, API quirks)
